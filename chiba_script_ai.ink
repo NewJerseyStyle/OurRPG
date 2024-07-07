@@ -20,6 +20,7 @@ After the game, we moved to the living room to chat and catch up. Karri seemed t
 Seeing her excited reaction, a warm feeling surged through me. I recalled the time she hugged a shark pillow at IKEA, a memory that seemed to melt my heart. Karri was jumping around, light and joyful, her hair flowing in the wind. In that moment, I was completely captivated. 
 
 * "By the way, I have a gift for you!" Karri said, pulling out a piece of paper from her bag with a smile. -> proposal
+* I continued chatting with the group. -> party_ends
 
 === proposal ===
 "This paper, can you write your last name in front of my name?"
@@ -45,30 +46,58 @@ She just smiled softly, leaving the blank application form behind, and opened th
 
 === party_ends ===
 After the lively party, we cleaned up and collapsed, exhausted. But I couldn't fall asleep immediately.
-"Why did I say I was deceiving her? I was sincere." I couldn't help but ask the ceiling.
-I pondered for a while, but couldn't come to a conclusion. My head ached, and drowsiness crept in.
+{proposal: "What makes she think I was deceiving her? I was sincere." I couldn't help but ask the ceiling.}
+{proposal: I pondered for a while, but couldn't come to a conclusion. My head ached, and drowsiness crept in.}
 I don't know how long it took, but when I opened my eyes, it was a bright sunny morning.
-"I didn't deceive you." I repeated in my heart, taking a deep breath. I understood that love requires sincerity and effort. I couldn't just make promises with my mouth, I had to prove it with actions. I needed to cherish Karri, cherish the love between us, and let her know that my promise was sincere, that it wouldn't change easily. 
+"I will never deceive you." I repeated in my heart, taking a deep breath. I understood that love requires sincerity and effort. I couldn't just make promises with my mouth, I had to prove it with actions. I needed to cherish Karri, cherish the love between us, and let her know that my promise was sincere, that it wouldn't change easily. 
 
 -> chapter_two
 
 // Chapter Two
 
 === chapter_two ===
-I woke up to find myself in a strange bed, surrounded by unfamiliar surroundings. I tried to recall everything that had happened, but my memory was blank, as if it had been wiped clean. My heart raced, my breath quickened, and an unprecedented panic gripped me. Now, forget about cherishing Karri, I didn't even know if I was still alive. 
+I woke up to find myself in a strange bed, surrounded by unfamiliar surroundings. I tried to recall everything that had happened, but my memory was blank, as if it had been wiped clean. My heart raced, my breath quickened, and an unprecedented panic gripped me. Now, forget about cherishing Karri, I am in her body, where am I, I didn't even know if I was still alive. Where is my body?
 
 * I fumbled to get out of bed and walked to the window, hoping to find some clues through the window. -> window_view
 * I stayed in bed, trying to calm down. -> phone_call
 
 === phone_call ===
-As I lay in bed, unable to sleep, my phone suddenly rang. It was an unknown number. Curious, I answered the call.
+The phone rang, startling me from my reverie. I glanced at the caller ID – it was Jay. I hadn't spoken to him in weeks, not since the accident. I didn't know if I was ready to talk to anyone yet, but I picked up anyway.
 
-"Hello? Who is this?" I asked, my voice trembling.
+"Hey, Karri," he said, his voice gentle. "How are you doing? I've been worried about you."
 
-"It's me, Karri. I need your help. Something strange has happened and I don't know what to do," she said, sounding panicked.
+I hesitated, unsure of how to respond. I hadn't left my room in weeks, hadn't been able to face the world without him. "I'm...fine, Jay," I lied, my voice cracking.
 
-* I listened intently and tried to calm her down. -> chapter_two
-* I told her I couldn't help and ended the call. -> stay_in_this_world
+"Karri, I know you're not fine," he said, his voice full of concern. "You've been holed up in that room for weeks. You need to get out, get some fresh air. Let me come over and take you out for a walk or something."
+
+I shook my head, even though he couldn't see me. "No, Jay, I'm okay. Really."
+
+"Okay, well, if you're not going to let me come over, then at least talk to me," he said, his voice persuasive. "I've been thinking about your research on time machines...do you think it's possible?"
+
+I felt a chill run down my spine. Time machine? Karri is working on time machine? I know nothing about this, I have no idea how to respond. "Jay, I don't know," I said, my voice barely above a whisper. "I... I haven't thought about it in weeks."
+
+"I know, I know," he said, his voice soft. "I just thought it might be a way to...I don't know, to turn back time or something. To get him back."
+
+I am confused, get who back? "I don't think we can get anyone back with a time machine," I said.
+
+"I know," he said, his voice heavy with empathy. "I just wish there was something I could do to help you, Karri. You're not alone in this. William was a nice guy, we all loved him."
+
+I took a deep breath, trying to composed myself. "Thanks, Jay. Just talking to you helps."
+
+"Anytime, Karri," he said. "I'll let you go, but promise me you'll try to get out of that room soon, okay?"
+
+I cannot believe what did I heard, William is gone, I am dead, this is appalling. "I'll try, Jay. Thanks again for calling."
+
+As I hung up the phone, I felt a sense of emptiness wash over me. So my body is dead, and I am Karri, what will happen next? I cannot imagine. But situation will not get better without taking actions. I must do something.
+
+I looked around the room, taking in the familiar surroundings. I knew I needed to start searching for a way to move forward, to find a way to heal. And maybe, just maybe, I would start with that research on time machines...
+
+* Continue searching the room
+I decide to focus my attention on finding the box, leaving the window and its strange glow for later.
+-> search_room
+* Investigate the window
+I'm drawn to the window and its pulsating light. I decide to try and pry open the boards and see what's out there.
+-> window_view
 
 === window_view ===
 The view outside was familiar. I couldn't remember anything, I could barely even remember my own name. I couldn't understand what was happening, who I was, where I was, or why I was here.
@@ -126,7 +155,7 @@ I felt like I was being taken care of with special attention. My heart raced, an
 
 I could feel a tingling sensation spreading across my spine. Surprise and confusion intertwined within me, but there was also a sense of wonderful security. Because I knew that by checking this notebook, I could grasp the current situation, not get lost, or make wrong decisions.
 
-When I saw the note that said I would be having a wedding with Karri in the afternoon, I felt a surge of excitement, followed by endless entanglement. I didn't know what to do, as it involved whether or not to pretend to be myself during this time and attend the wedding. I remembered a sentence from the note: "Since the self is limited by finite rationality, therefore, only a part of it can be displayed at a time. So, the true 'self' that cannot be fully and accurately known by others is not the most important thing to be valued in relational interaction?"
+When I saw the note that said I would be having a wedding with Karri in the afternoon, I felt a surge of excitement, followed by endless entanglement. I didn't know what to do, as it involved whether or not to pretend to be myself during this time and attend the wedding. I remembered a sentence from the note: "Since the self is limited by bounded rationality, therefore, only a part of it can be displayed at a time. So, the true 'self' that cannot be fully and accurately known by others is not the most important thing to be valued in relational interaction?"
 
 It seemed like she had also gained new insights from this science fiction-like experience. I took out my own diary and saw two different fonts inside. The newly added part was neat and clear: "People are connected through imagined futures. The reality of the present does not determine the future. People often create the ending they pursue from a wrong beginning." But the last few paragraphs about the wedding seemed hesitant. After all, the wedding was something Karri looked forward to, but participating in it as myself didn't seem like something she was pursuing. She wrote: "People's feelings change. Maintaining expectations and plans for the future is the basis for maintaining relationships and driving change."
 
