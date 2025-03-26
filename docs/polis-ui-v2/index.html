@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comment Voting Demo v4 - List</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* --- Base & Layout Styles (Similar to v2/v3) --- */
+        body { font-family: sans-serif; margin: 0; padding: 0; background-color: #f0f0f0; display: flex; flex-direction: column; min-height: 100vh; /* Allow potential scrolling of the list */ }
+        .app-container { display: flex; flex-direction: column; flex-grow: 1; padding: 10px; max-width: 1200px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+        #tab-controls { display: flex; justify-content: center; margin-bottom: 10px; }
+        #tab-controls button { padding: 10px 15px; border: 1px solid #ccc; background-color: #eee; cursor: pointer; flex-grow: 1; max-width: 150px; text-align: center; }
+        #tab-controls button:first-child { border-top-left-radius: 5px; border-bottom-left-radius: 5px; border-right: none; }
+        #tab-controls button:last-child { border-top-right-radius: 5px; border-bottom-right-radius: 5px; }
+        #tab-controls button.active-tab { background-color: #fff; border-bottom: 1px solid #fff; font-weight: bold; position: relative; z-index: 2; }
+
+        /* --- Comment Area & Vertical List --- */
+        #comment-area {
+            background-color: #fff;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+            padding: 20px 10px; /* Add padding */
+            flex-shrink: 0;
+            /* min-height needed? Maybe not if list scrolls */
+            display: flex; /* Use flex for list */
+            flex-direction: column; /* Vertical list */
+            align-items: center; /* Center cards horizontally */
+            gap: 15px; /* Space between cards */
+            overflow-y: auto; /* Allow scrolling if list exceeds height */
+            max-height: 94vh; /* Limit height on mobile to prevent excessive scrolling */
+            box-sizing: border-box;
+            border-top-left-radius: 0; border-top-right-radius: 0;
+            position: relative; /* For end message */
+        }
+
+        #end-of-list-message {
+            display: none; /* Hidden initially */
+            text-align: center;
+            color: #555;
+            font-size: 1.2em;
+            padding: 20px;
+            width: 100%;
+        }
+
+        .comment-card {
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 15px; /* Slightly less padding */
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+            width: 95%; /* Responsive width */
+            max-width: 70vw; /* Max width for readability */
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+            tabindex="0"; /* All cards are potentially focusable */
+            cursor: grab; /* Indicate swipeable */
+            flex-shrink: 0; /* Prevent cards from shrinking */
+
+            /* Transition for disappearance */
+            transition: opacity 0.3s ease-out, max-height 0.4s ease-out, padding 0.4s ease-out, margin 0.4s ease-out, transform 0.3s ease-out;
+            /* Start with full height */
+             min-height: 20vh; /* Estimate min height, adjust if needed */
+             max-height: 50vh; /* Estimate max height, adjust if needed */
+             opacity: 1;
+             margin-bottom: 15px; /* Use margin for spacing controlled by gap */
+        }
+         /* State for when card is disappearing */
+         .comment-card.disappearing {
+             opacity: 0;
+             max-height: 0;
+             padding-top: 0;
+             padding-bottom: 0;
+             margin-top: 0;
+             margin-bottom: 0;
+             border-width: 0; /* Avoid border lingering */
+             overflow: hidden; /* Clip content during animation */
+             transform: scale(0.95); /* Optional shrink effect */
+             pointer-events: none; /* Disable interaction */
+             cursor: default;
+         }
+
+        .comment-card p { margin: 0 0 15px 0; max-height: 150px; overflow-y: auto; flex-grow: 1; font-size: 1.1em; text-align: left; }
+        .comment-buttons { display: none; justify-content: space-around; margin-top: 15px; }
+        .comment-buttons button { padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; }
+        .comment-buttons .agree { background-color: lightgreen; }
+        .comment-buttons .disagree { background-color: lightcoral; }
+        .comment-buttons .neutral { background-color: lightskyblue; }
+
+        /* --- Graph Area (Same as v2/v3) --- */
+        #graph-area { background-color: #fff; border-radius: 8px; border: 1px solid #ccc; padding: 15px; flex-grow: 1; display: none; justify-content: center; align-items: center; min-height: 70vh; box-sizing: border-box; border-top-left-radius: 0; border-top-right-radius: 0; position: relative; }
+        #voteChart { max-width: 100%; max-height: 400px; }
+        .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0; }
+        #chart-description { color: #333; text-align: center; margin-top: 5px; }
+
+        /* --- Desktop Styles --- */
+        @media (min-width: 1024px) {
+            body { overflow: hidden; } /* Prevent body scroll on desktop */
+            #tab-controls { display: none; }
+            .app-container { flex-direction: row; gap: 20px; height: calc(100vh - 20px); }
+            #comment-area {
+                width: 35%; display: flex !important; height: auto; /* Let height be determined by container */
+                max-height: calc(100vh - 40px); /* Limit height */
+                margin-bottom: 0; background-color: #ddd; border: none; border-radius: 8px;
+                padding: 20px 10px; /* Keep padding */
+                overflow-y: auto; /* Allow scrolling list in sidebar */
+            }
+            #graph-area { width: 65%; display: flex !important; height: auto; min-height: auto; max-height: calc(100vh - 40px); background-color: #e0e0e0; border: none; border-radius: 8px; }
+            .comment-card { width: 95%; max-width: 95%; background-color: #fff; border: 1px solid #ccc; margin-bottom: 15px; /* Keep margin for spacing */}
+            .comment-buttons { display: flex; }
+             #end-of-list-message { font-size: 1em; }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div id="tab-controls">
+            <button id="tab-comments" class="active-tab">Comments</button>
+            <button id="tab-chart">Chart</button>
+        </div>
+
+        <div id="comment-area" role="list"> <div id="end-of-list-message">No more comments!</div>
+            </div>
+
+        <div id="graph-area">
+            <canvas id="voteChart" role="img" aria-label="Distribution of votes"></canvas>
+            <div id="chart-description" class="sr-only" aria-live="polite"></div>
+        </div>
+    </div>
+
+    <script>
+        const initialComments = [
+             { id: 1, text: "First comment here. What does everyone think?" },
+             { id: 2, text: "Second comment. I have some reservations about the previous point, especially regarding the long term implications we haven't discussed yet." },
+             { id: 3, text: "Third. Totally agree with comment 1." },
+             { id: 4, text: "Fourth comment - strongly disagree with comment 2." },
+             { id: 5, text: "Fifth. Perhaps a compromise is possible between points 1 and 2?" },
+             { id: 6, text: "Sixth and final comment for this demo list." }
+        ];
+        let commentsData = [...initialComments]; // Working copy for data manipulation if needed later
+        commentsData.forEach(comment => {
+            if (comment.text.length > 250) comment.text = comment.text.substring(0, 247) + "...";
+        });
+
+        let voteData = { agree: 10, disagree: 5, neutral: 8 };
+
+        const commentArea = document.getElementById('comment-area');
+        const graphArea = document.getElementById('graph-area');
+        const chartDescription = document.getElementById('chart-description');
+        const tabComments = document.getElementById('tab-comments');
+        const tabChart = document.getElementById('tab-chart');
+        const endOfListMessage = document.getElementById('end-of-list-message');
+
+        let voteChart;
+        let touchStartX = 0, touchStartY = 0, currentX = 0, currentY = 0;
+        let isDragging = false;
+        let swipedCard = null; // Keep track of the card being swiped
+
+        // --- Tab Switching Logic (Same as v2/v3) ---
+        function showTab(tabName) { /* ... same ... */
+            const isDesktop = window.innerWidth >= 1024; if (isDesktop) { commentArea.style.display = 'flex'; graphArea.style.display = 'flex'; tabComments.classList.remove('active-tab'); tabChart.classList.remove('active-tab'); return; } if (tabName === 'comments') { commentArea.style.display = 'flex'; graphArea.style.display = 'none'; tabComments.classList.add('active-tab'); tabChart.classList.remove('active-tab'); } else if (tabName === 'chart') { commentArea.style.display = 'none'; graphArea.style.display = 'flex'; tabComments.classList.remove('active-tab'); tabChart.classList.add('active-tab'); }
+         }
+
+        // --- Card List Initialization ---
+        function createCommentCardElement(comment) {
+            const card = document.createElement('div');
+            card.className = 'comment-card'; // Use className for simplicity
+            card.dataset.id = comment.id;
+            card.setAttribute('role', 'listitem'); // Correct role for items in a list
+            card.setAttribute('aria-labelledby', `comment-text-${comment.id}`);
+            card.tabIndex = 0; // Make it focusable
+
+            card.innerHTML = `
+                <p id="comment-text-${comment.id}">${comment.text}</p>
+                <div class="comment-buttons">
+                    <button class="disagree" aria-label="Disagree with comment ${comment.id}">Disagree</button>
+                    <button class="neutral" aria-label="Neutral on comment ${comment.id}">Neutral</button>
+                    <button class="agree" aria-label="Agree with comment ${comment.id}">Agree</button>
+                </div>
+            `;
+
+            // Add button listeners
+            card.querySelector('.agree').addEventListener('click', (e) => { e.stopPropagation(); handleVote(card, 'agree'); });
+            card.querySelector('.disagree').addEventListener('click', (e) => { e.stopPropagation(); handleVote(card, 'disagree'); });
+            card.querySelector('.neutral').addEventListener('click', (e) => { e.stopPropagation(); handleVote(card, 'skip'); });
+
+             // Add swipe listeners directly to each card
+             addSwipeListeners(card);
+
+            return card;
+        }
+
+        function displayCommentList() {
+            // Clear previous list but keep end message container
+             commentArea.innerHTML = '';
+             commentArea.appendChild(endOfListMessage);
+
+             if (commentsData.length === 0) { // Check data source length
+                 showEndOfList();
+                 return;
+             } else {
+                 endOfListMessage.style.display = 'none';
+             }
+
+            commentsData.forEach(comment => {
+                 const cardElement = createCommentCardElement(comment);
+                 // Prepend end message so cards are added after it
+                 commentArea.insertBefore(cardElement, endOfListMessage);
+             });
+
+             // Optional: Focus the first card in the list initially
+             const firstCard = commentArea.querySelector('.comment-card');
+             if (firstCard) {
+                //  firstCard.focus(); // Maybe focus only on explicit user action or load
+             }
+        }
+
+        // --- Swipe Listeners & Handling (Attached per card) ---
+        function addSwipeListeners(element) {
+            element.addEventListener('touchstart', handleTouchStart, { passive: true });
+            element.addEventListener('touchmove', handleTouchMove, { passive: false });
+            element.addEventListener('touchend', handleTouchEnd);
+            element.addEventListener('mousedown', handleMouseDown);
+        }
+         // No need for removeSwipeListeners if element is removed from DOM
+
+        function handleTouchStart(event) {
+            swipedCard = event.currentTarget; // Identify the card being touched
+            // Ignore swipes starting on buttons or scrollable text
+            if (event.target.closest('button') || event.target.closest('p')) {
+                 swipedCard = null; // Don't track swipe
+                 isDragging = false;
+                 return;
+            }
+            touchStartX = event.touches[0].clientX;
+            touchStartY = event.touches[0].clientY;
+            currentX = touchStartX;
+            currentY = touchStartY;
+            isDragging = true;
+             swipedCard.style.transition = 'none'; // Disable transition during drag
+             swipedCard.style.zIndex = '100'; // Bring card to front during swipe
+        }
+         function handleMouseDown(event) {
+             swipedCard = event.currentTarget;
+             if (event.target.closest('button') || event.target.closest('p') || event.button !== 0) { // Ignore right-clicks etc.
+                  swipedCard = null; isDragging = false; return;
+             }
+             touchStartX = event.clientX;
+             touchStartY = event.clientY;
+             currentX = touchStartX;
+             currentY = touchStartY;
+             isDragging = true;
+             swipedCard.style.transition = 'none';
+             swipedCard.style.zIndex = '100';
+             document.addEventListener('mousemove', handleMouseMove, { passive: false });
+             document.addEventListener('mouseup', handleMouseUp);
+         }
+
+        function handleTouchMove(event) {
+            if (!isDragging || !swipedCard) return;
+            currentX = event.touches[0].clientX;
+            currentY = event.touches[0].clientY;
+            const deltaX = currentX - touchStartX;
+            const deltaY = currentY - touchStartY;
+
+            if (Math.abs(deltaX) > Math.abs(deltaY) + 10) event.preventDefault(); // Prevent scroll if horizontal
+
+            applyCardTransform(deltaX, deltaY);
+        }
+         function handleMouseMove(event) {
+            if (!isDragging || !swipedCard) return;
+             event.preventDefault(); // Prevent text selection etc. during drag
+             currentX = event.clientX;
+             currentY = event.clientY;
+             const deltaX = currentX - touchStartX;
+             const deltaY = currentY - touchStartY;
+             applyCardTransform(deltaX, deltaY);
+         }
+
+        function applyCardTransform(deltaX, deltaY) {
+            if (!swipedCard) return;
+             const rotation = deltaX * 0.05;
+             // Apply translation and rotation
+             swipedCard.style.transform = `translate(${deltaX}px, ${deltaY}px) rotate(${rotation}deg)`;
+        }
+
+        function handleTouchEnd() {
+            if (!isDragging || !swipedCard) return;
+            isDragging = false;
+             swipedCard.style.zIndex = ''; // Reset z-index
+
+            const deltaX = currentX - touchStartX;
+            const deltaY = currentY - touchStartY;
+            const absDeltaX = Math.abs(deltaX);
+            const absDeltaY = Math.abs(deltaY);
+            const swipeThreshold = 80;
+
+            if (absDeltaX > swipeThreshold || absDeltaY > swipeThreshold) {
+                let voteType = '';
+                if (absDeltaX > absDeltaY) voteType = (deltaX > 0) ? 'agree' : 'disagree';
+                else if (deltaY < -swipeThreshold) voteType = 'skip'; // Swipe Up
+
+                if (voteType !== '' && deltaY < swipeThreshold) { // Ensure not downward swipe
+                    handleVote(swipedCard, voteType); // Pass the card element
+                } else {
+                    resetCardPosition(swipedCard);
+                }
+            } else {
+                resetCardPosition(swipedCard);
+            }
+             swipedCard = null; // Clear reference
+        }
+         function handleMouseUp() {
+            if (!isDragging) return;
+             document.removeEventListener('mousemove', handleMouseMove);
+             document.removeEventListener('mouseup', handleMouseUp);
+             handleTouchEnd(); // Reuse logic
+         }
+
+        function resetCardPosition(card) {
+            if (!card) return;
+             card.style.transition = 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+             card.style.transform = `translate(0, 0) rotate(0deg)`; // Reset transform
+             // Remove transition override after snap back
+             setTimeout(() => { if (card) card.style.transition = ''; }, 300);
+        }
+
+        // --- Unified Vote Handling ---
+        function handleVote(cardElement, voteType) {
+             if (!cardElement || cardElement.classList.contains('disappearing')) return; // Already processing
+
+             const commentId = parseInt(cardElement.dataset.id);
+             console.log(`Vote: ${voteType} for comment ID: ${commentId}`);
+
+             // 1. Apply disappearing animation class
+             cardElement.classList.add('disappearing');
+              cardElement.style.transform = ''; // Clear any swipe transform before animating out
+
+             // 2. Listen for end of transition
+             cardElement.addEventListener('transitionend', function handleTransitionEnd(event) {
+                 // Ensure we're reacting to a relevant property (e.g., opacity or max-height)
+                 if (event.propertyName === 'opacity' || event.propertyName === 'max-height') {
+                     cardElement.removeEventListener('transitionend', handleTransitionEnd); // Clean up listener
+
+                     // 3. Process vote data
+                     if (voteType === 'agree') voteData.agree++;
+                     else if (voteType === 'disagree') voteData.disagree++;
+                     else voteData.neutral++; // skip/neutral
+                     updateChart();
+
+                     // 4. Find next card *before* removing current one
+                     let nextCard = cardElement.nextElementSibling;
+                      // Skip potential non-card elements like the end-message
+                      while(nextCard && !nextCard.classList.contains('comment-card')) {
+                           nextCard = nextCard.nextElementSibling;
+                      }
+
+                     // 5. Remove card from DOM
+                     cardElement.remove();
+
+                     // 6. Update data source (optional, if needed elsewhere)
+                     commentsData = commentsData.filter(c => c.id !== commentId);
+
+                     // 7. Focus next card or show end message
+                     if (nextCard) {
+                         nextCard.focus(); // Move focus for accessibility
+                         // Scroll into view slightly if needed
+                         // nextCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                     } else {
+                         // Check if any cards remain at all
+                          const remainingCards = commentArea.querySelector('.comment-card');
+                          if (!remainingCards) {
+                              showEndOfList();
+                          } else {
+                               // Maybe focus the last available card if the removed one was last?
+                               // Or focus the container? For now, do nothing if no specific 'next' card.
+                          }
+                     }
+                 }
+             });
+        }
+
+        function showEndOfList() {
+            endOfListMessage.style.display = 'block';
+            console.log("End of comments.");
+        }
+
+        // --- Keyboard Handling (LJK) ---
+        function handleKeyDown(event) {
+            const focusedElement = document.activeElement;
+
+            // Only act if the focused element is a comment card
+            if (!focusedElement || !focusedElement.classList.contains('comment-card')) {
+                 // Allow default behavior if focus is elsewhere
+                 return;
+            }
+
+             // Allow default scroll keys if focus is inside the paragraph
+             if (event.target.tagName === 'P' && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+                  return;
+             }
+
+            let handled = false;
+            const key = event.key.toLowerCase();
+            const targetCard = focusedElement; // Act on the focused card
+
+            switch (key) {
+                case 'l': handleVote(targetCard, 'agree'); handled = true; break;
+                case 'j': handleVote(targetCard, 'disagree'); handled = true; break;
+                case 'k': handleVote(targetCard, 'skip'); handled = true; break;
+            }
+
+            if (handled) { event.preventDefault(); }
+        }
+
+        // --- Chart Logic (Same as v2/v3/v4) ---
+        function initChart() { /* ... same ... */ const ctx = document.getElementById('voteChart').getContext('2d'); voteChart = new Chart(ctx, { type: 'polarArea', data: { labels: ['Agree', 'Disagree', 'Neutral/Skipped'], datasets: [{ label: 'Vote Distribution', data: [voteData.agree, voteData.disagree, voteData.neutral], backgroundColor: [ 'rgba(75, 192, 192, 0.6)', 'rgba(255, 99, 132, 0.6)', 'rgba(54, 162, 235, 0.6)' ], borderColor: [ 'rgba(75, 192, 192, 1)', 'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)' ], borderWidth: 1 }] }, options: { responsive: true, maintainAspectRatio: false, scales: { r: { beginAtZero: true } }, plugins: { legend: { position: 'top', }, tooltip: { enabled: true } } } }); updateChartDescription(); }
+        function updateChart() { /* ... same ... */ if (!voteChart) return; voteChart.data.datasets[0].data = [voteData.agree, voteData.disagree, voteData.neutral]; voteChart.update(); updateChartDescription(); }
+        function updateChartDescription() { /* ... same ... */ const totalVotes = voteData.agree + voteData.disagree + voteData.neutral; if (totalVotes === 0) { chartDescription.textContent = "No votes recorded yet."; return; } const agreePercent = Math.round((voteData.agree / totalVotes) * 100); const disagreePercent = Math.round((voteData.disagree / totalVotes) * 100); const neutralPercent = 100 - agreePercent - disagreePercent; chartDescription.textContent = `Current vote distribution: ${voteData.agree} Agree (${agreePercent} percent), ${voteData.disagree} Disagree (${disagreePercent} percent), ${voteData.neutral} Neutral or Skipped (${neutralPercent} percent).`; }
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initChart();
+            displayCommentList(); // Initial list display
+            showTab('comments');
+
+            tabComments.addEventListener('click', () => showTab('comments'));
+            tabChart.addEventListener('click', () => showTab('chart'));
+            document.body.addEventListener('keydown', handleKeyDown); // Listen globally, but logic checks focus
+            window.addEventListener('resize', () => { showTab(tabComments.classList.contains('active-tab') ? 'comments' : 'chart'); });
+
+            // Simulate real-time updates (same as before)
+            // setInterval(() => { ... updateChart ... }, 5000);
+        });
+
+    </script>
+</body>
+</html>
