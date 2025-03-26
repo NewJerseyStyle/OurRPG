@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comment Voting Demo</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            overflow: hidden; /* Prevent body scroll interfering with swipe */
+        }
+
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            padding: 10px;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        #comment-area {
+            background-color: #ddd;
+            border-radius: 8px;
+            padding: 10px;
+            flex-shrink: 0; /* Prevent shrinking on mobile */
+            height: 30vh; /* Container height for card percentage */
+            display: flex; /* To center the card */
+            align-items: center;
+            justify-content: center;
+            position: relative; /* For absolute positioning of cards if needed */
+            overflow: hidden; /* Hide overflow during transitions */
+            margin-bottom: 10px;
+             box-sizing: border-box;
+        }
+
+        .comment-card {
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            text-align: center;
+            min-height: 70%; /* At least 70% of comment-area height */
+            max-height: 90%;
+            width: 90%;
+            max-width: 90%;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow-y: auto; /* Allow scroll if content exceeds max height */
+            transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+            position: absolute; /* Position cards for transitions */
+            opacity: 0; /* Start hidden */
+            transform: scale(0.95);
+             box-sizing: border-box;
+             /* Make card focusable */
+             tabindex="0";
+        }
+
+        .comment-card.active {
+           opacity: 1;
+           transform: scale(1);
+           position: relative; /* Take space when active */
+           z-index: 1;
+        }
+
+        .comment-card p {
+            margin: 0 0 15px 0;
+            max-height: 150px; /* Limit visible text height initially */
+            overflow-y: auto; /* Scroll for longer text */
+            flex-grow: 1;
+             font-size: 1.1em;
+        }
+
+        .comment-buttons {
+            display: none; /* Hidden by default (mobile) */
+            justify-content: space-around;
+            margin-top: 15px;
+        }
+
+        .comment-buttons button {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .comment-buttons .agree { background-color: lightgreen; }
+        .comment-buttons .disagree { background-color: lightcoral; }
+        .comment-buttons .neutral { background-color: lightskyblue; }
+
+        #graph-area {
+           background-color: #e0e0e0;
+           border-radius: 8px;
+           padding: 15px;
+           flex-grow: 1; /* Takes remaining space on desktop */
+           display: flex; /* Use flex to contain canvas */
+           justify-content: center;
+           align-items: center;
+           min-height: 200px; /* Ensure it has some height */
+            box-sizing: border-box;
+            position: relative; /* For positioning description */
+        }
+
+        #voteChart {
+            max-width: 100%;
+            max-height: 400px; /* Limit chart height */
+        }
+
+        /* Visually hidden but accessible to screen readers */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border-width: 0;
+        }
+
+        #chart-description {
+             /* Can remain visually hidden if preferred, or styled subtly */
+             color: #333;
+             text-align: center;
+             margin-top: 5px;
+        }
+
+
+        /* Desktop Styles */
+        @media (min-width: 1024px) {
+            .app-container {
+                flex-direction: row;
+                gap: 20px;
+                height: calc(100vh - 20px); /* Full height minus padding */
+            }
+
+            #comment-area {
+                width: 35%;
+                height: auto; /* Auto height based on content */
+                max-height: calc(100vh - 40px); /* Limit height */
+                margin-bottom: 0;
+                align-items: flex-start; /* Align card to top */
+                 padding-top: 20px;
+            }
+
+            .comment-card {
+                min-height: 150px; /* Adjust min height for desktop */
+                max-width: 100%;
+                width: 95%;
+                position: relative; /* Reset position for desktop layout */
+                opacity: 1; /* Ensure visible */
+                transform: none; /* Reset transform */
+            }
+             /* Only show active card, remove absolute positioning stack */
+            .comment-card:not(.active) {
+                 display: none;
+             }
+
+            .comment-buttons {
+                display: flex; /* Show buttons on desktop */
+            }
+
+            #graph-area {
+                width: 65%;
+                height: auto; /* Auto height */
+                 max-height: calc(100vh - 40px); /* Limit height */
+            }
+
+            .swipe-hint {
+                position: absolute;
+                bottom: 15%;
+                left: 50%;
+                transform: translateX(-50%);
+                color: rgba(0,0,0,0.4);
+                font-size: 1.2em;
+                white-space: nowrap;
+                opacity: 0;
+                animation: fadeSlide 2s ease-in-out infinite;
+                pointer-events: none;
+                z-index: 2;
+            }
+
+            @keyframes fadeSlide {
+                0%, 100% { 
+                    opacity: 0;
+                    transform: translateX(-50%) translateY(10px);
+                }
+                50% { 
+                    opacity: 1;
+                    transform: translateX(-50%) translateY(0);
+                }
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="sr-only" aria-live="polite">
+        Use keyboard shortcuts: L to agree, K for neutral, and J to disagree.
+    </div>
+    <div class="app-container">
+        <div id="comment-area">
+            <div id="loading-message">Loading comments...</div>
+        </div>
+        <div id="graph-area">
+            <canvas id="voteChart" role="img" aria-label="Distribution of votes"></canvas>
+             <div id="chart-description" class="sr-only" aria-live="polite"></div>
+        </div>
+    </div>
+
+    <script>
+        const comments = [
+            { id: 1, text: "This is the first comment. It's quite short and to the point." },
+            { id: 2, text: "Here's another perspective. We should consider the long-term effects before deciding. This comment is a bit longer to test wrapping and potential overflow." },
+            { id: 3, text: "Absolutely agree with the previous point!" },
+            { id: 4, text: "I disagree completely. The proposal is flawed from the start." },
+            { id: 5, text: "Maybe we can find a middle ground? Let's explore alternative solutions. This requires careful consideration and might be complex." },
+            { id: 6, text: "Final comment for testing the loop." }
+        ];
+
+        // Limit comment text length
+        comments.forEach(comment => {
+            if (comment.text.length > 250) {
+                comment.text = comment.text.substring(0, 247) + "...";
+            }
+        });
+
+        let hasSwiped = false;
+
+        let currentCommentIndex = 0;
+        let voteData = { group1: 0, group2: 0, group3: 0, group4: 0 }; // Initial dummy data for comment groups
+
+        const commentArea = document.getElementById('comment-area');
+        const graphArea = document.getElementById('graph-area');
+        const loadingMessage = document.getElementById('loading-message');
+        const chartDescription = document.getElementById('chart-description');
+        let voteChart; // Chart instance
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let touchEndX = 0;
+        let touchEndY = 0;
+        let currentCardElement = null;
+
+        function createCommentCard(comment) {
+            const card = document.createElement('div');
+            card.classList.add('comment-card');
+            card.dataset.id = comment.id;
+            card.setAttribute('role', 'article');
+            card.setAttribute('aria-labelledby', `comment-text-${comment.id}`);
+            card.innerHTML = `
+                <p id="comment-text-${comment.id}">${comment.text}</p>
+                <div class="comment-buttons">
+                    <button class="disagree" aria-label="Disagree with comment ${comment.id}">Disagree</button>
+                    <button class="neutral" aria-label="Neutral on comment ${comment.id}">Neutral</button>
+                    <button class="agree" aria-label="Agree with comment ${comment.id}">Agree</button>
+                </div>
+            `;
+            // Add button listeners
+            card.querySelector('.agree').addEventListener('click', () => handleVote('group1', comment.id));
+            card.querySelector('.disagree').addEventListener('click', () => handleVote('group2', comment.id));
+            card.querySelector('.neutral').addEventListener('click', () => handleVote('group3', comment.id)); // Neutral button acts as skip/neutral vote
+            return card;
+        }
+
+        function displayComment(index) {
+            // Remove old card(s)
+            const existingCards = commentArea.querySelectorAll('.comment-card');
+            existingCards.forEach(card => card.remove());
+
+            if (index >= comments.length || index < 0) {
+                 console.log("No more comments or invalid index.");
+                 // Optional: Show end message or loop
+                 currentCommentIndex = 0; // Loop back
+                 index = 0;
+                 // return; // Or stop here
+            }
+
+            const comment = comments[index];
+            currentCardElement = createCommentCard(comment);
+
+             // Add swipe listeners to the new card
+            addSwipeListeners(currentCardElement);
+
+             // Insert and animate
+            commentArea.appendChild(currentCardElement);
+            // Force reflow to ensure transition works
+            void currentCardElement.offsetWidth;
+            currentCardElement.classList.add('active');
+
+            // Focus the card for keyboard controls
+             setTimeout(() => currentCardElement.focus(), 50); // Small delay might be needed
+
+            if (loadingMessage) loadingMessage.style.display = 'none';
+
+            // Add swipe hint only for first comment and first load
+            if (!hasSwiped && currentCommentIndex === 0 && index === 0) {
+                const hint = document.createElement('div');
+                hint.className = 'swipe-hint';
+                hint.textContent = '← Swipe →';
+                hint.setAttribute('aria-hidden', 'true');
+                currentCardElement.appendChild(hint);
+
+                // Remove hint after animation completes
+                setTimeout(() => {
+                    const existingHint = commentArea.querySelector('.swipe-hint');
+                        if (existingHint) existingHint.remove();
+                    }, 20000);
+            }
+        }
+
+         function addSwipeListeners(element) {
+            if (!element) return;
+            element.addEventListener('touchstart', handleTouchStart, { passive: false }); // Need passive: false to preventDefault
+            element.addEventListener('touchmove', handleTouchMove, { passive: false });
+            element.addEventListener('touchend', handleTouchEnd);
+        }
+
+        function handleTouchStart(event) {
+            touchStartX = event.changedTouches[0].screenX;
+            touchStartY = event.changedTouches[0].screenY;
+        }
+
+        function handleTouchMove(event) {
+             // Prevent scrolling while swiping vertically
+            touchEndX = event.changedTouches[0].screenX;
+            touchEndY = event.changedTouches[0].screenY;
+
+             const deltaX = touchEndX - touchStartX;
+             const deltaY = touchEndY - touchStartY;
+
+             // If swipe is primarily vertical, prevent page scroll
+             if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 10) { // Threshold of 10px
+                  event.preventDefault();
+             }
+
+             // Optional: Add visual feedback during move (e.g., translate)
+             // const card = event.currentTarget;
+             // card.style.transform = `translate(${deltaX}px, ${deltaY}px) rotate(${deltaX / 10}deg)`;
+        }
+
+        function handleTouchEnd(event) {
+            touchEndX = event.changedTouches[0].screenX;
+            touchEndY = event.changedTouches[0].screenY;
+            handleSwipeGesture();
+
+             // Optional: Reset visual feedback transform
+             // const card = event.currentTarget;
+             // card.style.transform = '';
+        }
+
+        function handleSwipeGesture() {
+            const deltaX = touchEndX - touchStartX;
+            const deltaY = touchEndY - touchStartY;
+            const absDeltaX = Math.abs(deltaX);
+            const absDeltaY = Math.abs(deltaY);
+            const swipeThreshold = 50; // Minimum pixels to trigger swipe
+
+            if (absDeltaX > swipeThreshold || absDeltaY > swipeThreshold) {
+                // Determine direction: prioritize horizontal swipes, then vertical up
+                if (absDeltaX > absDeltaY) { // Horizontal swipe
+                    if (deltaX > 0) { // Swipe Right - group 1
+                        handleVote('group1', comments[currentCommentIndex].id);
+                    } else { // Swipe Left - group 2
+                        handleVote('group2', comments[currentCommentIndex].id);
+                    }
+                } else { // Vertical swipe
+                    if (deltaY < 0) { // Swipe Up - group 3
+                        handleVote('group3', comments[currentCommentIndex].id);
+                    }
+                    // Ignore Swipe Down for now - no action for group 4 via swipe
+                }
+            }
+
+            if (!hasSwiped) {
+                hasSwiped = true;
+                // Remove any existing hints immediately
+                const existingHint = commentArea.querySelector('.swipe-hint');
+                if (existingHint) existingHint.remove();
+            }
+
+            // Reset touch coordinates
+            touchStartX = 0;
+            touchStartY = 0;
+            touchEndX = 0;
+            touchEndY = 0;
+        }
+
+        function handleVote(voteType, commentId) {
+            console.log(`Vote: ${voteType} for comment ID: ${commentId}`);
+
+             if (!currentCardElement) return;
+
+             // Animate out the current card
+             
+             currentCardElement.style.opacity = '0';
+             let transform = 'scale(0.9)';
+             if (voteType === 'group1') {
+                voteData.group1++;
+                transform = 'translateX(100px) rotate(10deg)';
+             } else if (voteType === 'group2') {
+                voteData.group2++;
+                transform = 'translateX(-100px) rotate(-10deg)';
+             } else if (voteType === 'group3') {
+                voteData.group3++;
+                transform = 'translateY(-100px) scale(0.9)';
+             } else {
+                voteData.group4++;
+             }
+             currentCardElement.style.transform = transform;
+
+
+            // Simulate updating global vote data (replace with actual API call)
+            if (voteType === 'agree') voteData.agree++;
+            else if (voteType === 'disagree') voteData.disagree++;
+            else voteData.neutral++; // 'skip' maps to 'neutral' in graph
+
+            // Update the graph
+            updateChart();
+
+            // Show next comment after animation
+            setTimeout(() => {
+                 currentCommentIndex++;
+                 if (currentCommentIndex >= comments.length) {
+                      currentCommentIndex = 0; // Loop
+                 }
+                 displayComment(currentCommentIndex);
+            }, 300); // Match CSS transition duration
+        }
+
+        function handleKeyDown(event) {
+            // Only act if the event target is the card or within it, or body if card focused
+            const activeCard = commentArea.querySelector('.comment-card.active');
+             if (!activeCard || document.activeElement !== activeCard) {
+                 // If the focus is not on the card, maybe allow default arrow key behavior
+                 // unless we specifically want global capture when a card is visible.
+                 // For now, only capture if the card is focused.
+                // console.log("Keydown ignored, card not focused.");
+                // return;
+                // Let's try capturing if a card *exists* regardless of focus,
+                // but be mindful of interfering with browser/NVDA.
+                if (!activeCard) return;
+            }
+
+             let handled = false;
+            switch (event.key) {
+                case 'l':
+                    console.log("Key: L");
+                    handleVote('group1', comments[currentCommentIndex].id);
+                    handled = true;
+                    break;
+                case 'j':
+                     console.log("Key: J");
+                    handleVote('group2', comments[currentCommentIndex].id);
+                     handled = true;
+                    break;
+                case 'k':
+                     console.log("Key: K");
+                    handleVote('group3', comments[currentCommentIndex].id);
+                     handled = true;
+                    break;
+            }
+
+             if (handled) {
+                event.preventDefault(); // Prevent default browser action (e.g., scrolling)
+             }
+        }
+
+        function initChart() {
+            const ctx = document.getElementById('voteChart').getContext('2d');
+            voteChart = new Chart(ctx, {
+                type: 'polarArea', // or 'radar'
+                data: {
+                    labels: ['Comments {1, 6}', 'Comments {2, 3}', 'Comments {4}', 'Comments {5}'],
+                    datasets: [{
+                        label: 'Vote Distribution by Comment Group',
+                        data: [voteData.group1, voteData.group2, voteData.group3, voteData.group4],
+                        backgroundColor: [
+                            'rgba(75, 192, 192, 0.6)',
+                            'rgba(255, 99, 132, 0.6)',
+                            'rgba(54, 162, 235, 0.6)',
+                            'rgba(255, 205, 86, 0.6)' // Add a color for group4
+                        ],
+                        borderColor: [
+                             'rgba(75, 192, 192, 1)',
+                             'rgba(255, 99, 132, 1)',
+                             'rgba(54, 162, 235, 1)',
+                             'rgba(255, 205, 86, 1)'  // Add a color for group4
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                     responsive: true,
+                     maintainAspectRatio: false,
+                    scales: {
+                        r: { // For polarArea, 'r' is the radial axis
+                            beginAtZero: true
+                        }
+                    },
+                     plugins: {
+                         legend: {
+                             position: 'top',
+                         },
+                         tooltip: {
+                             enabled: true
+                         }
+                     }
+                }
+            });
+             updateChartDescription(); // Initial description
+        }
+
+        function updateChart() {
+             if (!voteChart) return;
+            voteChart.data.datasets[0].data = [voteData.group1, voteData.group2, voteData.group3, voteData.group4];
+            voteChart.update();
+             updateChartDescription(); // Update SR description
+        }
+
+         function updateChartDescription() {
+             const totalVotes = voteData.agree + voteData.disagree + voteData.neutral;
+             if (totalVotes === 0) {
+                 chartDescription.textContent = "No votes recorded yet.";
+                 return;
+             }
+             const group1Percent = Math.round((voteData.group1 / totalVotes) * 100);
+             const group2Percent = Math.round((voteData.group2 / totalVotes) * 100);
+             const group3Percent = Math.round((voteData.group3 / totalVotes) * 100);
+             const group4Percent = Math.round((voteData.group4 / totalVotes) * 100);
+
+             chartDescription.textContent = `Current vote distribution: ${voteData.group1} for Comments {1, 6} (${group1Percent} percent), ${voteData.group2} for Comments {2, 3} (${group2Percent} percent), ${voteData.group3} for Comment {4} (${group3Percent} percent), ${voteData.group4} for Comment {5} (${group4Percent} percent).`;
+
+              // Also update the aria-label slightly if needed, though the description is primary
+              // document.getElementById('voteChart').ariaLabel = `Polar chart showing vote distribution: ${agreePercent}% Agree, ${disagreePercent}% Disagree, ${neutralPercent}% Neutral.`;
+         }
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initChart();
+            displayComment(currentCommentIndex);
+
+            // Add keydown listener to the body to capture keys globally (with caution)
+            document.body.addEventListener('keydown', handleKeyDown);
+
+            // Simulate real-time updates from other users (for demo)
+            setInterval(() => {
+                 // Randomly increment a vote category
+                 const randomVote = Math.random();
+                 if (randomVote < 0.25) voteData.group1++;
+                 else if (randomVote < 0.5) voteData.group2++;
+                 else if (randomVote < 0.75) voteData.group3++;
+                 else voteData.group4++;
+                 updateChart();
+                console.log("Simulated external vote received.");
+            }, 5000); // Update every 5 seconds
+        });
+
+    </script>
+</body>
+</html>
