@@ -192,8 +192,10 @@
                 return tile;
             },
 
+            // [FIXED] Correctly calculate NW pixel coordinates from tile coordinates
             _tileCoordsToNw: function (coords) {
-                return map.project(coords, coords.z);
+                const size = this.getTileSize();
+                return new L.Point(coords.x * size.x, coords.y * size.y);
             },
 
             _tileCoordsToBounds: function (coords) {
