@@ -1,241 +1,327 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>城市斥候: 迷霧探索</title>
+    <title>Scout Mission: Fog of War</title>
     
-    <!-- Leaflet & Plugins -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
     
     <style>
-        body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
-        #map { height: 100vh; width: 100vw; background: #222; } /* 深色背景配合迷霧 */
-        
-        /* UI 面板 */
-        #ui-panel {
-            position: absolute; top: 10px; left: 10px; right: 10px;
-            z-index: 1000; pointer-events: none; /* 讓點擊穿透到地圖 */
+        /* --- Cyberpunk / Tactical UI Theme --- */
+        :root {
+            --primary-color: #00ffcc;
+            --bg-dark: rgba(0, 10, 20, 0.9);
+            --danger-color: #ff3333;
         }
-        .hud-box {
-            background: rgba(0, 0, 0, 0.8); color: #0f0;
-            padding: 10px; border-radius: 8px;
-            border: 1px solid #0f0;
-            margin-bottom: 10px;
+        
+        body { margin: 0; padding: 0; font-family: 'Courier New', monospace; overflow: hidden; background: #000; }
+        
+        /* Map Container */
+        #map { height: 100vh; width: 100vw; z-index: 0; }
+
+        /* UI Layer - Uses Flexbox to separate Top and Bottom to prevent overlap */
+        #ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; /* Let clicks pass through to map */
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            z-index: 1000;
+        }
+
+        /* Top HUD */
+        .hud-top {
+            padding: 15px;
+            background: linear-gradient(to bottom, var(--bg-dark), transparent);
+            color: var(--primary-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .status-box {
+            background: rgba(0,0,0,0.6);
+            border: 1px solid var(--primary-color);
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 12px;
             pointer-events: auto;
-            font-family: monospace;
         }
-        .btn {
-            background: #0f0; color: black; border: none;
-            padding: 8px 16px; border-radius: 4px; cursor: pointer;
-            font-weight: bold; width: 100%;
-            margin-top: 5px;
+
+        /* Indicators */
+        .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+        .online { background: #0f0; box-shadow: 0 0 8px #0f0; }
+        .offline { background: #f00; }
+        .syncing { background: #ff0; }
+
+        /* Bottom Controls */
+        .hud-bottom {
+            padding: 20px;
+            background: linear-gradient(to top, var(--bg-dark), transparent);
+            pointer-events: auto;
+            text-align: center;
         }
-        .btn:active { background: #00cc00; }
-        
-        /* 狀態指示燈 */
-        #status-dot {
-            display: inline-block; width: 10px; height: 10px;
-            border-radius: 50%; background: gray;
-            margin-right: 5px;
+
+        .btn-action {
+            background: var(--primary-color);
+            color: #000;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 2px;
+            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 0 15px rgba(0, 255, 204, 0.4);
+            transition: all 0.2s;
         }
-        .online { background: #0f0 !important; box-shadow: 0 0 5px #0f0; }
-        .syncing { background: #ff0 !important; }
-        .offline { background: #f00 !important; }
+        .btn-action:active { transform: scale(0.95); background: #fff; }
+
+        /* Stats text */
+        .stat-row { margin: 2px 0; }
+        .highlight { color: white; font-weight: bold; }
+
     </style>
 </head>
 <body>
 
-    <div id="ui-panel">
-        <div class="hud-box">
-            <div><span id="status-dot"></span> <span id="status-text">連線中...</span></div>
-            <div style="font-size: 0.8em; color: #aaa; margin-top: 5px;">
-                探索者: <span id="user-id">...</span><br>
-                速度: <span id="speed-display">0</span> km/h<br>
-                同步版本: v<span id="ver-display">-1</span>
+    <div id="ui-layer">
+        <!-- Top Section -->
+        <div class="hud-top">
+            <div class="status-box">
+                <div class="stat-row"><span class="dot online" id="status-dot"></span> <span id="status-text">Initializing...</span></div>
+                <div class="stat-row">ID: <span class="highlight" id="user-id">--</span></div>
+                <div class="stat-row">Ver: <span id="ver-display">0</span></div>
+            </div>
+            
+            <div class="status-box" style="text-align: right;">
+                <div class="stat-row">SPD: <span class="highlight" id="speed-display">0</span> km/h</div>
+                <div class="stat-row">GPS: <span id="gps-acc">Waiting</span></div>
             </div>
         </div>
-        
-        <div class="hud-box" style="bottom: 20px; position: absolute; width: calc(100% - 40px);">
-            <div>任務目標：尋找活動出租空間</div>
-            <button class="btn" onclick="openPOIForm()">📍 回報發現場所 (+50分)</button>
+
+        <!-- Bottom Section -->
+        <div class="hud-bottom">
+            <div style="color: #aaa; font-size: 10px; margin-bottom: 10px;">MISSION: UNCOVER THE CITY</div>
+            <button class="btn-action" onclick="reportLocation()">Report POI (+50)</button>
         </div>
     </div>
 
     <div id="map"></div>
 
-    <!-- 引入 Gradio Client -->
     <script type="module">
         import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client/+esm";
 
-        // ========== 設定區 ==========
-        // 請替換成你的 Space ID，例如 "jason/scout-game-backend"
-        const HF_SPACE = "npc0/DemoWalkAPI"; 
-        // ===========================
+        // === CONFIGURATION ===
+        // REPLACE THIS WITH YOUR HF SPACE!
+        const HF_SPACE = "YOUR_USERNAME/YOUR_SPACE_NAME"; 
+        // =====================
 
-        // 狀態變數
-        const myUserId = "scout_" + Math.floor(Math.random() * 10000);
+        // --- Game State ---
+        const myUserId = "Ranger-" + Math.floor(Math.random() * 9999);
         document.getElementById('user-id').innerText = myUserId;
-
+        
         let lastSyncTime = 0;
         let currentSnapshotVer = -1;
         let isSyncing = false;
         
-        // GPS 變數
         let myLat = null, myLng = null, mySpeed = 0;
-        let lastPosTime = Date.now();
 
-        // 初始化地圖 (深色風格)
-        const map = L.map('map').setView([25.0330, 121.5654], 15);
+        // --- 1. Map Setup ---
+        // We use a dark basemap so when the fog is revealed, it looks cool.
+        const map = L.map('map', {
+            zoomControl: false, // Move zoom to not overlap UI? Or just hide it
+            attributionControl: false
+        }).setView([25.0330, 121.5654], 15);
+
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; OpenStreetMap, &copy; CartoDB'
+            maxZoom: 19
         }).addTo(map);
 
-        // 圖層管理
-        // 1. Base Layer: 歷史快照 (藍色/冷色調底層)
-        const baseHeatLayer = L.heatLayer([], {
-            radius: 20, blur: 20, maxZoom: 16,
-            gradient: {0.4: 'blue', 0.65: 'cyan', 1: '#00ff00'}
-        }).addTo(map);
+        // --- 2. Custom Fog Layer (The Magic) ---
+        // This creates a Canvas that covers the map. 
+        // It is filled with Black. We "erase" circles where players have been.
+        L.FogLayer = L.GridLayer.extend({
+            createTile: function (coords) {
+                const tile = L.DomUtil.create('canvas', 'leaflet-tile');
+                const size = this.getTileSize();
+                tile.width = size.x;
+                tile.height = size.y;
 
-        // 2. Active Layer: 即時動態 (紅色/暖色調上層)
-        const activeHeatLayer = L.heatLayer([], {
-            radius: 15, blur: 10, maxZoom: 16,
-            gradient: {0.4: 'yellow', 1: 'red'}
-        }).addTo(map);
+                const ctx = tile.getContext('2d');
+                
+                // 1. Fill with Fog (Black with 95% opacity)
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.95)'; 
+                ctx.fillRect(0, 0, tile.width, tile.height);
+
+                // 2. Prepare to Erase (Reveal)
+                ctx.globalCompositeOperation = 'destination-out';
+                
+                // 3. Draw holes for known points
+                // Note: In a real GridLayer, we should only check points relevant to this tile coordinates.
+                // For simplicity in this prototype, we iterate the compressed grid.
+                // (Performance note: If points > 2000, we need spatial indexing like QuadTree)
+                
+                const bounds = this._tileCoordsToBounds(coords);
+                
+                // Draw stored snapshot points
+                allKnownPoints.forEach(pt => {
+                    const latLng = L.latLng(pt[0], pt[1]);
+                    // Only draw if point is somewhat near this tile to save perf
+                    if (bounds.contains(latLng) || bounds.pad(0.1).contains(latLng)) {
+                        const p = map.project(latLng, coords.z).subtract(this._tileCoordsToNw(coords));
+                        const radius = pt[2] || 20; // Radius from server
+                        
+                        // Create a soft gradient edge for the hole
+                        const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius);
+                        grad.addColorStop(0, 'rgba(0,0,0,1)');   // Center: Fully transparent (Eraser strength 1)
+                        grad.addColorStop(0.7, 'rgba(0,0,0,1)'); 
+                        grad.addColorStop(1, 'rgba(0,0,0,0)');   // Edge: No erasure
+
+                        ctx.fillStyle = grad;
+                        ctx.beginPath();
+                        ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                });
+
+                return tile;
+            },
+
+            _tileCoordsToNw: function (coords) {
+                return map.project(coords, coords.z);
+            },
+
+            _tileCoordsToBounds: function (coords) {
+                var nw = this._tileCoordsToNw(coords),
+                    se = this._tileCoordsToNw(new L.Point(coords.x + 1, coords.y + 1));
+                return new L.LatLngBounds(map.unproject(nw, coords.z), map.unproject(se, coords.z));
+            }
+        });
+
+        // Global storage for points: [lat, lng, radius]
+        let allKnownPoints = []; 
         
-        // 暫存即時點位
-        let activePoints = []; 
+        // Initialize Fog Layer
+        const fogLayer = new L.FogLayer({ tileSize: 512 }).addTo(map);
 
-        // 用戶自己的標記
-        const myMarker = L.marker([0, 0]).addTo(map);
+        // My Location Marker (A glowing dot)
+        const myIcon = L.divIcon({
+            className: 'my-div-icon',
+            html: '<div style="width:12px; height:12px; background:#00ffcc; border-radius:50%; box-shadow:0 0 10px #00ffcc; border:2px solid white;"></div>',
+            iconSize: [16, 16]
+        });
+        const myMarker = L.marker([0,0], {icon: myIcon}).addTo(map);
 
-        // --- 核心邏輯: GPS 追蹤 ---
+
+        // --- 3. GPS Logic ---
         if (navigator.geolocation) {
             navigator.geolocation.watchPosition((pos) => {
-                const { latitude, longitude, speed } = pos.coords;
+                const { latitude, longitude, speed, accuracy } = pos.coords;
                 myLat = latitude;
                 myLng = longitude;
-                
-                // 處理速度 (m/s 轉 km/h)
-                // 如果設備沒給速度，可以透過距離差計算(這裡省略簡化)
-                mySpeed = (speed || 0) * 3.6;
-                
-                document.getElementById('speed-display').innerText = mySpeed.toFixed(1);
-                
-                // 更新自己在地圖上的位置
-                myMarker.setLatLng([latitude, longitude]);
-                map.setView([latitude, longitude], map.getZoom(), {animate: true}); // 跟隨視角
+                mySpeed = (speed || 0) * 3.6; // m/s to km/h
 
-            }, (err) => {
-                console.error("GPS Error:", err);
-                document.getElementById('status-text').innerText = "GPS 權限被拒";
-            }, {
-                enableHighAccuracy: true,
-                maximumAge: 1000
-            });
+                // Update UI
+                document.getElementById('speed-display').innerText = mySpeed.toFixed(1);
+                document.getElementById('gps-acc').innerText = accuracy ? Math.round(accuracy) + "m" : "N/A";
+
+                // Move Marker
+                myMarker.setLatLng([latitude, longitude]);
+                
+                // Center map initially
+                if (lastSyncTime === 0) map.setView([latitude, longitude], 16);
+
+            }, err => console.error(err), { enableHighAccuracy: true });
         }
 
-        // --- 核心邏輯: 同步迴圈 ---
-        async function startSyncLoop() {
+        // --- 4. Network Sync Logic ---
+        async function startSync() {
             let client;
-            const statusDot = document.getElementById('status-dot');
             const statusText = document.getElementById('status-text');
-            
+            const statusDot = document.getElementById('status-dot');
+
             try {
                 client = await Client.connect(HF_SPACE);
-                statusText.innerText = "已連線伺服器";
-                statusDot.className = "online";
+                statusText.innerText = "Connected";
+                statusDot.className = "dot online";
             } catch (e) {
-                statusText.innerText = "連線失敗 (檢查 ID)";
-                statusDot.className = "offline";
+                statusText.innerText = "Connection Failed";
+                statusDot.className = "dot offline";
                 return;
             }
 
             setInterval(async () => {
-                if (isSyncing) return; // 避免塞車
+                if (isSyncing) return;
                 isSyncing = true;
-                statusDot.className = "syncing"; // 變黃燈
+                statusDot.className = "dot syncing";
 
                 try {
-                    // 呼叫後端
                     const result = await client.predict("/sync", [
-                        lastSyncTime, 
-                        currentSnapshotVer, 
-                        myUserId, 
-                        myLat, 
-                        myLng, 
+                        lastSyncTime,
+                        currentSnapshotVer,
+                        myUserId,
+                        myLat,
+                        myLng,
                         mySpeed
                     ]);
 
                     const res = result.data[0];
-                    
-                    // 1. 處理快照 (全量更新)
+                    let needRedraw = false;
+
+                    // A. Snapshot Update (Replace everything)
                     if (res.sync_type === "snapshot") {
-                        console.log("下載歷史快照...", res.payload.length);
+                        console.log("Full Snapshot Received:", res.payload.length);
+                        allKnownPoints = res.payload; // [lat, lng, radius]
                         
-                        // 更新底層熱力圖
-                        baseHeatLayer.setLatLngs(res.payload);
+                        // If snapshot includes recent buffer
+                        if (res.recent_events) {
+                            allKnownPoints = allKnownPoints.concat(res.recent_events);
+                        }
                         
-                        // 更新版本
                         currentSnapshotVer = res.snapshot_version;
                         document.getElementById('ver-display').innerText = currentSnapshotVer;
-                        
-                        // 重置即時層 (因為這些資料已經合併進快照了)
-                        activePoints = []; 
-                        
-                        // 如果快照包裡有附帶 recent_events，將其加入 active layer
-                        if (res.recent_events) {
-                            res.recent_events.forEach(evt => processDeltaEvent(evt));
-                        }
-                    }
-                    
-                    // 2. 處理增量 (Delta)
-                    else if (res.sync_type === "delta") {
-                        // 只有新事件
-                        res.payload.forEach(evt => processDeltaEvent(evt));
+                        needRedraw = true;
+                    } 
+                    // B. Delta Update (Append new)
+                    else if (res.payload && res.payload.length > 0) {
+                        console.log("Delta Received:", res.payload.length);
+                        // Append new points to our local cache
+                        allKnownPoints = allKnownPoints.concat(res.payload);
+                        needRedraw = true;
                     }
 
-                    // 渲染即時層
-                    activeHeatLayer.setLatLngs(activePoints);
-                    
-                    // 更新時間戳
+                    if (needRedraw) {
+                        fogLayer.redraw(); // Trigger Canvas Redraw
+                    }
+
                     lastSyncTime = res.server_time;
-                    statusDot.className = "online"; // 變回綠燈
+                    statusDot.className = "dot online";
 
                 } catch (err) {
-                    console.warn("Sync error:", err);
-                    statusDot.className = "offline"; // 紅燈
+                    console.warn(err);
+                    statusDot.className = "dot offline";
                 } finally {
                     isSyncing = false;
                 }
-            }, 2000); // 每 2 秒同步一次
+
+            }, 2000); // Sync every 2 seconds
         }
 
-        function processDeltaEvent(evt) {
-            // 忽略自己的回音
-            if (evt.u === myUserId) return;
-            
-            // 處理格式: evt.l = [lat, lng], evt.s = speed
-            // 根據速度決定顯示強度 (這裡僅做前端視覺微調)
-            const intensity = (evt.s < 5) ? 1.0 : 0.5;
-            
-            // 加入即時列表
-            activePoints.push([evt.l[0], evt.l[1], intensity]);
-            
-            // 保持 activePoints 不要無限增長 (只保留最近 500 點視覺效果)
-            if (activePoints.length > 500) activePoints.shift();
+        startSync();
+
+        // Button Action
+        window.reportLocation = function() {
+            if(!myLat) { alert("Waiting for GPS..."); return; }
+            // Here you would open a modal or redirect to Google Forms
+            const note = prompt("Enter location name/type:");
+            if(note) alert(`Reported: ${note} at ${myLat.toFixed(5)}, ${myLng.toFixed(5)}`);
         }
 
-        // 啟動
-        startSyncLoop();
-
-        // 全局函數供按鈕呼叫
-        window.openPOIForm = function() {
-            alert("這裡將會彈出 Google Forms 或直接寫入 Sheet 的介面。\n目前位置: " + myLat + ", " + myLng);
-        };
     </script>
 </body>
 </html>
