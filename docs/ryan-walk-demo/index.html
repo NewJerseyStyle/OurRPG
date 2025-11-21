@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>城市斥候: 迷霧探索</title>
+    
+    <!-- Leaflet & Plugins -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+    
+    <style>
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+        #map { height: 100vh; width: 100vw; background: #222; } /* 深色背景配合迷霧 */
+        
+        /* UI 面板 */
+        #ui-panel {
+            position: absolute; top: 10px; left: 10px; right: 10px;
+            z-index: 1000; pointer-events: none; /* 讓點擊穿透到地圖 */
+        }
+        .hud-box {
+            background: rgba(0, 0, 0, 0.8); color: #0f0;
+            padding: 10px; border-radius: 8px;
+            border: 1px solid #0f0;
+            margin-bottom: 10px;
+            pointer-events: auto;
+            font-family: monospace;
+        }
+        .btn {
+            background: #0f0; color: black; border: none;
+            padding: 8px 16px; border-radius: 4px; cursor: pointer;
+            font-weight: bold; width: 100%;
+            margin-top: 5px;
+        }
+        .btn:active { background: #00cc00; }
+        
+        /* 狀態指示燈 */
+        #status-dot {
+            display: inline-block; width: 10px; height: 10px;
+            border-radius: 50%; background: gray;
+            margin-right: 5px;
+        }
+        .online { background: #0f0 !important; box-shadow: 0 0 5px #0f0; }
+        .syncing { background: #ff0 !important; }
+        .offline { background: #f00 !important; }
+    </style>
+</head>
+<body>
+
+    <div id="ui-panel">
+        <div class="hud-box">
+            <div><span id="status-dot"></span> <span id="status-text">連線中...</span></div>
+            <div style="font-size: 0.8em; color: #aaa; margin-top: 5px;">
+                探索者: <span id="user-id">...</span><br>
+                速度: <span id="speed-display">0</span> km/h<br>
+                同步版本: v<span id="ver-display">-1</span>
+            </div>
+        </div>
+        
+        <div class="hud-box" style="bottom: 20px; position: absolute; width: calc(100% - 40px);">
+            <div>任務目標：尋找活動出租空間</div>
+            <button class="btn" onclick="openPOIForm()">📍 回報發現場所 (+50分)</button>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <!-- 引入 Gradio Client -->
+    <script type="module">
+        import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client/+esm";
+
+        // ========== 設定區 ==========
+        // 請替換成你的 Space ID，例如 "jason/scout-game-backend"
+        const HF_SPACE = "npc0/DemoWalkAPI"; 
+        // ===========================
+
+        // 狀態變數
+        const myUserId = "scout_" + Math.floor(Math.random() * 10000);
+        document.getElementById('user-id').innerText = myUserId;
+
+        let lastSyncTime = 0;
+        let currentSnapshotVer = -1;
+        let isSyncing = false;
+        
+        // GPS 變數
+        let myLat = null, myLng = null, mySpeed = 0;
+        let lastPosTime = Date.now();
+
+        // 初始化地圖 (深色風格)
+        const map = L.map('map').setView([25.0330, 121.5654], 15);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap, &copy; CartoDB'
+        }).addTo(map);
+
+        // 圖層管理
+        // 1. Base Layer: 歷史快照 (藍色/冷色調底層)
+        const baseHeatLayer = L.heatLayer([], {
+            radius: 20, blur: 20, maxZoom: 16,
+            gradient: {0.4: 'blue', 0.65: 'cyan', 1: '#00ff00'}
+        }).addTo(map);
+
+        // 2. Active Layer: 即時動態 (紅色/暖色調上層)
+        const activeHeatLayer = L.heatLayer([], {
+            radius: 15, blur: 10, maxZoom: 16,
+            gradient: {0.4: 'yellow', 1: 'red'}
+        }).addTo(map);
+        
+        // 暫存即時點位
+        let activePoints = []; 
+
+        // 用戶自己的標記
+        const myMarker = L.marker([0, 0]).addTo(map);
+
+        // --- 核心邏輯: GPS 追蹤 ---
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition((pos) => {
+                const { latitude, longitude, speed } = pos.coords;
+                myLat = latitude;
+                myLng = longitude;
+                
+                // 處理速度 (m/s 轉 km/h)
+                // 如果設備沒給速度，可以透過距離差計算(這裡省略簡化)
+                mySpeed = (speed || 0) * 3.6;
+                
+                document.getElementById('speed-display').innerText = mySpeed.toFixed(1);
+                
+                // 更新自己在地圖上的位置
+                myMarker.setLatLng([latitude, longitude]);
+                map.setView([latitude, longitude], map.getZoom(), {animate: true}); // 跟隨視角
+
+            }, (err) => {
+                console.error("GPS Error:", err);
+                document.getElementById('status-text').innerText = "GPS 權限被拒";
+            }, {
+                enableHighAccuracy: true,
+                maximumAge: 1000
+            });
+        }
+
+        // --- 核心邏輯: 同步迴圈 ---
+        async function startSyncLoop() {
+            let client;
+            const statusDot = document.getElementById('status-dot');
+            const statusText = document.getElementById('status-text');
+            
+            try {
+                client = await Client.connect(HF_SPACE);
+                statusText.innerText = "已連線伺服器";
+                statusDot.className = "online";
+            } catch (e) {
+                statusText.innerText = "連線失敗 (檢查 ID)";
+                statusDot.className = "offline";
+                return;
+            }
+
+            setInterval(async () => {
+                if (isSyncing) return; // 避免塞車
+                isSyncing = true;
+                statusDot.className = "syncing"; // 變黃燈
+
+                try {
+                    // 呼叫後端
+                    const result = await client.predict("/sync", [
+                        lastSyncTime, 
+                        currentSnapshotVer, 
+                        myUserId, 
+                        myLat, 
+                        myLng, 
+                        mySpeed
+                    ]);
+
+                    const res = result.data[0];
+                    
+                    // 1. 處理快照 (全量更新)
+                    if (res.sync_type === "snapshot") {
+                        console.log("下載歷史快照...", res.payload.length);
+                        
+                        // 更新底層熱力圖
+                        baseHeatLayer.setLatLngs(res.payload);
+                        
+                        // 更新版本
+                        currentSnapshotVer = res.snapshot_version;
+                        document.getElementById('ver-display').innerText = currentSnapshotVer;
+                        
+                        // 重置即時層 (因為這些資料已經合併進快照了)
+                        activePoints = []; 
+                        
+                        // 如果快照包裡有附帶 recent_events，將其加入 active layer
+                        if (res.recent_events) {
+                            res.recent_events.forEach(evt => processDeltaEvent(evt));
+                        }
+                    }
+                    
+                    // 2. 處理增量 (Delta)
+                    else if (res.sync_type === "delta") {
+                        // 只有新事件
+                        res.payload.forEach(evt => processDeltaEvent(evt));
+                    }
+
+                    // 渲染即時層
+                    activeHeatLayer.setLatLngs(activePoints);
+                    
+                    // 更新時間戳
+                    lastSyncTime = res.server_time;
+                    statusDot.className = "online"; // 變回綠燈
+
+                } catch (err) {
+                    console.warn("Sync error:", err);
+                    statusDot.className = "offline"; // 紅燈
+                } finally {
+                    isSyncing = false;
+                }
+            }, 2000); // 每 2 秒同步一次
+        }
+
+        function processDeltaEvent(evt) {
+            // 忽略自己的回音
+            if (evt.u === myUserId) return;
+            
+            // 處理格式: evt.l = [lat, lng], evt.s = speed
+            // 根據速度決定顯示強度 (這裡僅做前端視覺微調)
+            const intensity = (evt.s < 5) ? 1.0 : 0.5;
+            
+            // 加入即時列表
+            activePoints.push([evt.l[0], evt.l[1], intensity]);
+            
+            // 保持 activePoints 不要無限增長 (只保留最近 500 點視覺效果)
+            if (activePoints.length > 500) activePoints.shift();
+        }
+
+        // 啟動
+        startSyncLoop();
+
+        // 全局函數供按鈕呼叫
+        window.openPOIForm = function() {
+            alert("這裡將會彈出 Google Forms 或直接寫入 Sheet 的介面。\n目前位置: " + myLat + ", " + myLng);
+        };
+    </script>
+</body>
+</html>
