@@ -12,19 +12,19 @@
         /* --- Cyberpunk / Tactical UI Theme --- */
         :root {
             --primary-color: #00ffcc;
-            --bg-dark: rgba(0, 10, 20, 0.9);
+            --bg-dark: rgba(0, 10, 20, 0.8);
             --danger-color: #ff3333;
         }
         
         body { margin: 0; padding: 0; font-family: 'Courier New', monospace; overflow: hidden; background: #000; }
         
         /* Map Container */
-        #map { height: 100vh; width: 100vw; z-index: 0; }
+        #map { height: 100vh; width: 100vw; z-index: 0; background: #000; }
 
-        /* UI Layer - Uses Flexbox to separate Top and Bottom to prevent overlap */
+        /* UI Layer */
         #ui-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; /* Let clicks pass through to map */
+            pointer-events: none;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
@@ -39,15 +39,17 @@
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
+            text-shadow: 0 0 5px #000;
         }
 
         .status-box {
-            background: rgba(0,0,0,0.6);
+            background: rgba(0,0,0,0.5);
             border: 1px solid var(--primary-color);
             padding: 8px;
             border-radius: 4px;
             font-size: 12px;
             pointer-events: auto;
+            backdrop-filter: blur(4px);
         }
 
         /* Indicators */
@@ -65,7 +67,7 @@
         }
 
         .btn-action {
-            background: var(--primary-color);
+            background: rgba(0, 255, 204, 0.8);
             color: #000;
             border: none;
             padding: 15px 30px;
@@ -81,7 +83,6 @@
         }
         .btn-action:active { transform: scale(0.95); background: #fff; }
 
-        /* Stats text */
         .stat-row { margin: 2px 0; }
         .highlight { color: white; font-weight: bold; }
 
@@ -106,8 +107,8 @@
 
         <!-- Bottom Section -->
         <div class="hud-bottom">
-            <div style="color: #aaa; font-size: 10px; margin-bottom: 10px;">MISSION: UNCOVER THE CITY</div>
-            <button class="btn-action" onclick="reportLocation()">Report POI (+50)</button>
+            <div style="color: #ccc; font-size: 10px; margin-bottom: 10px; text-shadow: 0 0 2px #000;">MISSION: EXPLORE & REVEAL</div>
+            <button class="btn-action" onclick="reportLocation()">Report Location (+50)</button>
         </div>
     </div>
 
@@ -130,21 +131,22 @@
         let isSyncing = false;
         
         let myLat = null, myLng = null, mySpeed = 0;
+        let isFirstLoad = true;
 
-        // --- 1. Map Setup ---
-        // We use a dark basemap so when the fog is revealed, it looks cool.
+        // --- 1. Map Setup (Satellite) ---
         const map = L.map('map', {
-            zoomControl: false, // Move zoom to not overlap UI? Or just hide it
-            attributionControl: false
-        }).setView([25.0330, 121.5654], 15);
+            zoomControl: false, 
+            attributionControl: false,
+            zoomAnimation: true
+        }).setView([25.0330, 121.5654], 16);
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            maxZoom: 19
+        // Using Esri World Imagery for Satellite view
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            maxZoom: 19,
+            attribution: 'Tiles &copy; Esri'
         }).addTo(map);
 
-        // --- 2. Custom Fog Layer (The Magic) ---
-        // This creates a Canvas that covers the map. 
-        // It is filled with Black. We "erase" circles where players have been.
+        // --- 2. Custom Fog Layer (Soft Blur & Optimized) ---
         L.FogLayer = L.GridLayer.extend({
             createTile: function (coords) {
                 const tile = L.DomUtil.create('canvas', 'leaflet-tile');
@@ -154,37 +156,45 @@
 
                 const ctx = tile.getContext('2d');
                 
-                // 1. Fill with Fog (Black with 95% opacity)
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.95)'; 
+                // A. Draw Darkness (Fog)
+                // 0.9 opacity to allow slight visibility of terrain features (looks cooler)
+                // Or 0.95 for hardcore darkness
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.92)'; 
                 ctx.fillRect(0, 0, tile.width, tile.height);
 
-                // 2. Prepare to Erase (Reveal)
+                // B. Prepare to Erase (Light Up)
                 ctx.globalCompositeOperation = 'destination-out';
-                
-                // 3. Draw holes for known points
-                // Note: In a real GridLayer, we should only check points relevant to this tile coordinates.
-                // For simplicity in this prototype, we iterate the compressed grid.
-                // (Performance note: If points > 2000, we need spatial indexing like QuadTree)
                 
                 const bounds = this._tileCoordsToBounds(coords);
                 
-                // Draw stored snapshot points
+                // Optimize: Only loop through ALL points if we haven't implemented spatial indexing yet.
+                // For < 5000 points, simple loop is acceptable on modern phones.
                 allKnownPoints.forEach(pt => {
                     const latLng = L.latLng(pt[0], pt[1]);
-                    // Only draw if point is somewhat near this tile to save perf
-                    if (bounds.contains(latLng) || bounds.pad(0.1).contains(latLng)) {
-                        const p = map.project(latLng, coords.z).subtract(this._tileCoordsToNw(coords));
-                        const radius = pt[2] || 20; // Radius from server
+                    
+                    // Margin of error (pad) to account for the radius extending into this tile
+                    if (bounds.pad(0.2).contains(latLng)) {
+                        const p = this._latLngToTilePixel(latLng, coords);
+                        let radius = pt[2] || 20;
                         
-                        // Create a soft gradient edge for the hole
-                        const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius);
-                        grad.addColorStop(0, 'rgba(0,0,0,1)');   // Center: Fully transparent (Eraser strength 1)
-                        grad.addColorStop(0.7, 'rgba(0,0,0,1)'); 
-                        grad.addColorStop(1, 'rgba(0,0,0,0)');   // Edge: No erasure
+                        // Increase radius slightly for the soft blur effect
+                        const drawRadius = radius * 1.5;
+
+                        // Soft Gradient Logic
+                        const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, drawRadius);
+                        
+                        // Center (0): Fully Transparent (Alpha 1 in destination-out means Remove 100%)
+                        grad.addColorStop(0, 'rgba(0,0,0,1)'); 
+                        
+                        // Middle (0.4): Still mostly clear
+                        grad.addColorStop(0.4, 'rgba(0,0,0,0.8)');
+                        
+                        // Edge (1.0): No removal (Alpha 0)
+                        grad.addColorStop(1, 'rgba(0,0,0,0)'); 
 
                         ctx.fillStyle = grad;
                         ctx.beginPath();
-                        ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+                        ctx.arc(p.x, p.y, drawRadius, 0, Math.PI * 2);
                         ctx.fill();
                     }
                 });
@@ -192,7 +202,15 @@
                 return tile;
             },
 
-            // [FIXED] Correctly calculate NW pixel coordinates from tile coordinates
+            // Helper: Calculate pixel position relative to the tile
+            _latLngToTilePixel: function(latLng, coords) {
+                const mapPos = map.project(latLng, coords.z);
+                const size = this.getTileSize();
+                const tileNw = new L.Point(coords.x * size.x, coords.y * size.y);
+                return mapPos.subtract(tileNw);
+            },
+
+            // Fixed NW calculation
             _tileCoordsToNw: function (coords) {
                 const size = this.getTileSize();
                 return new L.Point(coords.x * size.x, coords.y * size.y);
@@ -205,28 +223,26 @@
             }
         });
 
-        // Global storage for points: [lat, lng, radius]
         let allKnownPoints = []; 
-        
-        // Initialize Fog Layer
-        const fogLayer = new L.FogLayer({ tileSize: 512 }).addTo(map);
+        const fogLayer = new L.FogLayer({ tileSize: 512, updateWhenIdle: false }).addTo(map);
 
-        // My Location Marker (A glowing dot)
+        // My Location Marker (Cyberpunk Style)
         const myIcon = L.divIcon({
             className: 'my-div-icon',
-            html: '<div style="width:12px; height:12px; background:#00ffcc; border-radius:50%; box-shadow:0 0 10px #00ffcc; border:2px solid white;"></div>',
-            iconSize: [16, 16]
+            html: '<div style="width:14px; height:14px; background:#00ffcc; border-radius:50%; box-shadow:0 0 15px #00ffcc, 0 0 5px white; border:2px solid #fff;"></div>',
+            iconSize: [18, 18],
+            iconAnchor: [9, 9] // Center the icon
         });
-        const myMarker = L.marker([0,0], {icon: myIcon}).addTo(map);
+        const myMarker = L.marker([0,0], {icon: myIcon, zIndexOffset: 1000}).addTo(map);
 
 
-        // --- 3. GPS Logic ---
+        // --- 3. GPS Logic (Auto-Follow) ---
         if (navigator.geolocation) {
             navigator.geolocation.watchPosition((pos) => {
                 const { latitude, longitude, speed, accuracy } = pos.coords;
                 myLat = latitude;
                 myLng = longitude;
-                mySpeed = (speed || 0) * 3.6; // m/s to km/h
+                mySpeed = (speed || 0) * 3.6; 
 
                 // Update UI
                 document.getElementById('speed-display').innerText = mySpeed.toFixed(1);
@@ -235,10 +251,18 @@
                 // Move Marker
                 myMarker.setLatLng([latitude, longitude]);
                 
-                // Center map initially
-                if (lastSyncTime === 0) map.setView([latitude, longitude], 16);
+                // Auto-Follow Camera Logic
+                // Use panTo for smooth animation instead of setView
+                map.panTo([latitude, longitude], {
+                    animate: true,
+                    duration: 1.0, // Smooth glide
+                    easeLinearity: 0.25
+                });
 
-            }, err => console.error(err), { enableHighAccuracy: true });
+            }, err => console.error(err), { 
+                enableHighAccuracy: true,
+                maximumAge: 1000 
+            });
         }
 
         // --- 4. Network Sync Logic ---
@@ -249,10 +273,10 @@
 
             try {
                 client = await Client.connect(HF_SPACE);
-                statusText.innerText = "Connected";
+                statusText.innerText = "Online";
                 statusDot.className = "dot online";
             } catch (e) {
-                statusText.innerText = "Connection Failed";
+                statusText.innerText = "Offline";
                 statusDot.className = "dot offline";
                 return;
             }
@@ -260,7 +284,9 @@
             setInterval(async () => {
                 if (isSyncing) return;
                 isSyncing = true;
-                statusDot.className = "dot syncing";
+                
+                // Only show "Syncing" yellow light if it takes too long
+                // statusDot.className = "dot syncing"; 
 
                 try {
                     const result = await client.predict("/sync", [
@@ -275,33 +301,32 @@
                     const res = result.data[0];
                     let needRedraw = false;
 
-                    // A. Snapshot Update (Replace everything)
+                    // A. Snapshot Update
                     if (res.sync_type === "snapshot") {
-                        console.log("Full Snapshot Received:", res.payload.length);
-                        allKnownPoints = res.payload; // [lat, lng, radius]
-                        
-                        // If snapshot includes recent buffer
+                        console.log("Snapshot Loaded:", res.payload.length);
+                        allKnownPoints = res.payload;
                         if (res.recent_events) {
                             allKnownPoints = allKnownPoints.concat(res.recent_events);
                         }
-                        
                         currentSnapshotVer = res.snapshot_version;
                         document.getElementById('ver-display').innerText = currentSnapshotVer;
                         needRedraw = true;
                     } 
-                    // B. Delta Update (Append new)
+                    // B. Delta Update
                     else if (res.payload && res.payload.length > 0) {
-                        console.log("Delta Received:", res.payload.length);
-                        // Append new points to our local cache
+                        // Append new points
                         allKnownPoints = allKnownPoints.concat(res.payload);
                         needRedraw = true;
                     }
 
+                    // Only redraw if we actually got new data (Fixes heartbeat flicker)
                     if (needRedraw) {
-                        fogLayer.redraw(); // Trigger Canvas Redraw
+                        fogLayer.redraw();
                     }
 
                     lastSyncTime = res.server_time;
+                    
+                    // Keep dot green unless error
                     statusDot.className = "dot online";
 
                 } catch (err) {
@@ -311,17 +336,15 @@
                     isSyncing = false;
                 }
 
-            }, 2000); // Sync every 2 seconds
+            }, 2000);
         }
 
         startSync();
 
-        // Button Action
         window.reportLocation = function() {
-            if(!myLat) { alert("Waiting for GPS..."); return; }
-            // Here you would open a modal or redirect to Google Forms
-            const note = prompt("Enter location name/type:");
-            if(note) alert(`Reported: ${note} at ${myLat.toFixed(5)}, ${myLng.toFixed(5)}`);
+            if(!myLat) { alert("Waiting for GPS signal..."); return; }
+            const note = prompt("Name of the location (Music Room, Hall, etc.):");
+            if(note) alert(`Location Saved: ${note}`);
         }
 
     </script>
