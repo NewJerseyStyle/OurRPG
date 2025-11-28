@@ -3,350 +3,693 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scout Mission: Fog of War</title>
+    <title>City Explorer: Urban Scout</title>
     
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
+
     <style>
-        /* --- Cyberpunk / Tactical UI Theme --- */
-        :root {
-            --primary-color: #00ffcc;
-            --bg-dark: rgba(0, 10, 20, 0.8);
-            --danger-color: #ff3333;
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            background-color: #f0fdf4; /* Light green/white bg */
+            font-family: 'Nunito', sans-serif;
         }
-        
-        body { margin: 0; padding: 0; font-family: 'Courier New', monospace; overflow: hidden; background: #000; }
-        
-        /* Map Container */
-        #map { height: 100vh; width: 100vw; z-index: 0; background: #000; }
 
-        /* UI Layer */
-        #ui-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        #map {
+            height: 100%;
+            width: 100%;
+            z-index: 1;
+        }
+
+        #fog-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
             pointer-events: none;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            z-index: 1000;
         }
 
-        /* Top HUD */
-        .hud-top {
-            padding: 15px;
-            background: linear-gradient(to bottom, var(--bg-dark), transparent);
-            color: var(--primary-color);
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            text-shadow: 0 0 5px #000;
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 3;
+            pointer-events: none;
         }
 
-        .status-box {
-            background: rgba(0,0,0,0.5);
-            border: 1px solid var(--primary-color);
-            padding: 8px;
-            border-radius: 4px;
-            font-size: 12px;
+        .interactive-ui {
             pointer-events: auto;
-            backdrop-filter: blur(4px);
         }
 
-        /* Indicators */
-        .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
-        .online { background: #0f0; box-shadow: 0 0 8px #0f0; }
-        .offline { background: #f00; }
-        .syncing { background: #ff0; }
+        /* Fun Pulse for User Location */
+        .user-pulse {
+            animation: pulse-ring 2s infinite;
+        }
+        @keyframes pulse-ring {
+            0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(59, 130, 246, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
 
-        /* Bottom Controls */
-        .hud-bottom {
-            padding: 20px;
-            background: linear-gradient(to top, var(--bg-dark), transparent);
+        /* Modal Styles */
+        #report-modal {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .hidden-modal {
+            opacity: 0;
+            transform: scale(0.95);
+            pointer-events: none;
+        }
+        .visible-modal {
+            opacity: 1;
+            transform: scale(1);
             pointer-events: auto;
-            text-align: center;
         }
 
-        .btn-action {
-            background: rgba(0, 255, 204, 0.8);
-            color: #000;
+        /* Crosshair Transition */
+        #crosshair-container {
+            transition: all 0.2s ease;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* --- Custom Leaflet Popup Styles (Daylight Theme) --- */
+        .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            color: #1e293b;
+            padding: 0;
             border: none;
-            padding: 15px 30px;
-            font-size: 16px;
-            font-weight: bold;
-            border-radius: 2px;
-            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
-            cursor: pointer;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            box-shadow: 0 0 15px rgba(0, 255, 204, 0.4);
-            transition: all 0.2s;
         }
-        .btn-action:active { transform: scale(0.95); background: #fff; }
-
-        .stat-row { margin: 2px 0; }
-        .highlight { color: white; font-weight: bold; }
-
+        .leaflet-popup-content {
+            margin: 12px;
+            line-height: 1.5;
+            font-family: 'Nunito', sans-serif;
+        }
+        .leaflet-container a.leaflet-popup-close-button {
+            color: #94a3b8;
+            padding: 8px;
+        }
+        .leaflet-container a.leaflet-popup-close-button:hover {
+            color: #ef4444;
+        }
     </style>
 </head>
 <body>
 
-    <div id="ui-layer">
-        <!-- Top Section -->
-        <div class="hud-top">
-            <div class="status-box">
-                <div class="stat-row"><span class="dot online" id="status-dot"></span> <span id="status-text">Initializing...</span></div>
-                <div class="stat-row">ID: <span class="highlight" id="user-id">--</span></div>
-                <div class="stat-row">Ver: <span id="ver-display">0</span></div>
-            </div>
-            
-            <div class="status-box" style="text-align: right;">
-                <div class="stat-row">SPD: <span class="highlight" id="speed-display">0</span> km/h</div>
-                <div class="stat-row">GPS: <span id="gps-acc">Waiting</span></div>
-            </div>
-        </div>
+    <!-- Map Container -->
+    <div id="map"></div>
 
-        <!-- Bottom Section -->
-        <div class="hud-bottom">
-            <div style="color: #ccc; font-size: 10px; margin-bottom: 10px; text-shadow: 0 0 2px #000;">MISSION: EXPLORE & REVEAL</div>
-            <button class="btn-action" onclick="reportLocation()">Report Location (+50)</button>
+    <!-- Canvas for Fog of War -->
+    <canvas id="fog-layer"></canvas>
+
+    <!-- Report Modal -->
+    <div id="report-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm hidden-modal p-4">
+        <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            
+            <!-- Modal Header -->
+            <div class="bg-gradient-to-r from-blue-500 to-indigo-600 p-4 flex justify-between items-center text-white">
+                <h2 class="text-xl font-bold"><i class="fa-solid fa-map-location-dot mr-2"></i>Add Discovery</h2>
+                <button onclick="closeModal()" class="hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition-colors">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Modal Body (Form) -->
+            <div class="p-6 overflow-y-auto">
+                <form id="rental-form" onsubmit="submitReport(event)" autocomplete="off">
+                    
+                    <div class="mb-4 bg-blue-50 p-3 rounded-lg border border-blue-100">
+                        <label class="block text-xs uppercase font-bold text-blue-800 mb-1">Target Coordinates</label>
+                        <div id="modal-coords" class="text-blue-600 font-mono text-sm font-bold">--</div>
+                    </div>
+
+                    <!-- Autocomplete Address Field -->
+                    <div class="mb-4 relative">
+                        <label class="block text-xs uppercase font-bold text-gray-500 mb-1">Address</label>
+                        <div class="relative">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-gray-400"></i>
+                            <input type="text" id="address-input" name="address" class="w-full bg-gray-50 border border-gray-200 rounded-lg py-2 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white transition-all text-gray-700" placeholder="Search nearby address..." oninput="handleAddressInput(this)">
+                        </div>
+                        <ul id="address-suggestions" class="absolute z-50 w-full bg-white border border-gray-200 mt-1 rounded-lg max-h-40 overflow-y-auto hidden shadow-xl divide-y divide-gray-100"></ul>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="block text-xs uppercase font-bold text-gray-500 mb-1">Name of Space</label>
+                        <input type="text" name="spaceName" required class="w-full bg-gray-50 border border-gray-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white transition-all text-gray-700" placeholder="e.g. Sunny Loft Studio">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="block text-xs uppercase font-bold text-gray-500 mb-1">Rentable Units</label>
+                            <input type="number" name="rentableCount" min="1" class="w-full bg-gray-50 border border-gray-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all text-gray-700" placeholder="1">
+                        </div>
+                        <div>
+                            <label class="block text-xs uppercase font-bold text-gray-500 mb-1">Capacity</label>
+                            <input type="number" name="capacity" class="w-full bg-gray-50 border border-gray-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all text-gray-700" placeholder="e.g. 50">
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="block text-xs uppercase font-bold text-gray-500 mb-1">Price / Rate</label>
+                        <input type="text" name="price" class="w-full bg-gray-50 border border-gray-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all text-gray-700" placeholder="e.g. $50/hr">
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="block text-xs uppercase font-bold text-gray-500 mb-1">How to Book</label>
+                        <input type="text" name="bookingMethod" class="w-full bg-gray-50 border border-gray-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all text-gray-700" placeholder="Website, App, or Phone">
+                    </div>
+
+                    <div class="mb-6">
+                        <label class="block text-xs uppercase font-bold text-gray-500 mb-1">Good to Know</label>
+                        <textarea name="additionalInfo" rows="3" class="w-full bg-gray-50 border border-gray-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all text-gray-700" placeholder="Great lighting, wheelchair accessible, etc..."></textarea>
+                    </div>
+
+                    <button type="submit" class="w-full bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 text-white font-bold py-3 rounded-xl shadow-lg transform active:scale-95 transition-all">
+                        <i class="fa-solid fa-paper-plane mr-2"></i> Share Discovery
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
 
-    <div id="map"></div>
-
-    <script type="module">
-        import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client/+esm";
-
-        // === CONFIGURATION ===
-        // REPLACE THIS WITH YOUR HF SPACE!
-        const HF_SPACE = "npc0/DemoWalkAPI"; 
-        // =====================
-
-        // --- Game State ---
-        const myUserId = "Ranger-" + Math.floor(Math.random() * 9999);
-        document.getElementById('user-id').innerText = myUserId;
+    <!-- UI Overlay -->
+    <div id="ui-layer" class="flex flex-col justify-between p-4 sm:p-6">
         
-        let lastSyncTime = 0;
-        let currentSnapshotVer = -1;
-        let isSyncing = false;
+        <!-- Header -->
+        <div class="flex justify-between items-start pointer-events-none">
+            <div class="bg-white/90 p-3 rounded-2xl shadow-lg backdrop-blur-md pointer-events-auto border-l-4 border-orange-500">
+                <h1 class="text-xl md:text-2xl font-black text-gray-800 tracking-tight"><i class="fa-solid fa-city text-orange-500 mr-2"></i>CITY EXPLORER</h1>
+                <div class="text-xs font-bold text-gray-400 uppercase tracking-widest">Community Mapping</div>
+            </div>
+            
+            <div class="bg-white/90 p-3 rounded-2xl shadow-lg backdrop-blur-md pointer-events-auto text-right">
+                <div class="flex items-center justify-end gap-2 text-blue-600 font-bold">
+                    <div class="w-2 h-2 rounded-full bg-blue-500 animate-ping"></div> LIVE
+                </div>
+                <div class="text-sm font-mono text-gray-600" id="timer">00:00:00</div>
+            </div>
+        </div>
+
+        <!-- Center Crosshair (Dynamic) -->
+        <div id="crosshair-container" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none z-50 transition-all duration-200">
+            <!-- Distance Badge -->
+            <div id="crosshair-badge" class="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg whitespace-nowrap transition-colors duration-200">
+                Checking...
+            </div>
+            
+            <!-- Reticle SVG -->
+            <div class="relative drop-shadow-xl">
+                <!-- Outer Ring -->
+                <div id="crosshair-ring" class="w-16 h-16 border-2 border-gray-400 rounded-full flex items-center justify-center transition-colors duration-200 bg-white/10 backdrop-blur-sm">
+                    <!-- Inner Dot -->
+                    <div id="crosshair-dot" class="w-2 h-2 bg-gray-400 rounded-full transition-colors duration-200"></div>
+                </div>
+                
+                <!-- Guidelines -->
+                <div class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1 w-0.5 h-2 bg-white/80"></div>
+                <div class="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1 w-0.5 h-2 bg-white/80"></div>
+                <div class="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 w-2 h-0.5 bg-white/80"></div>
+                <div class="absolute right-0 top-1/2 translate-x-1 -translate-y-1/2 w-2 h-0.5 bg-white/80"></div>
+            </div>
+        </div>
+
+        <!-- Notification Toast -->
+        <div id="notification" class="absolute top-24 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full shadow-xl hidden pointer-events-none transition-all duration-300 flex items-center gap-3 font-bold z-50 text-sm whitespace-nowrap">
+            <i class="fa-solid fa-circle-info"></i> <span id="notif-msg">Notification</span>
+        </div>
+
+        <!-- Footer Stats -->
+        <div class="grid grid-cols-3 gap-3 items-end pointer-events-none">
+            
+            <!-- Pace -->
+            <div class="bg-white/90 p-3 rounded-2xl shadow-lg backdrop-blur-md pointer-events-auto">
+                <div class="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Pace</div>
+                <div class="text-xl font-black text-gray-700" id="speed">0 <span class="text-sm font-normal text-gray-400">km/h</span></div>
+            </div>
+
+            <!-- Action Button -->
+            <div class="text-center interactive-ui pointer-events-auto">
+                <button id="report-btn" onclick="openReportModal()" class="bg-gray-400 cursor-not-allowed text-white font-bold py-4 px-8 rounded-full shadow-lg transition-all uppercase text-sm tracking-wider w-full md:w-auto border-4 border-white opacity-80">
+                    <i class="fa-solid fa-location-dot mr-2"></i> Report Spot
+                </button>
+            </div>
+
+            <!-- Coords -->
+            <div class="bg-white/90 p-3 rounded-2xl shadow-lg backdrop-blur-md text-right pointer-events-auto">
+                <div class="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Coordinates</div>
+                <div class="text-xs font-mono font-bold text-gray-600" id="coords">WAITING...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <script>
+        // --- Configuration Constants ---
+        const CONFIG = {
+            FOG_VISIBILITY_RADIUS_METERS: 300,
+            ENABLE_PROXIMITY_CHECK: true,
+            PROXIMITY_LIMIT_METERS: 50, // Strict 50m limit
+            START_COORDS: [40.7128, -74.0060]
+        };
+
+        // --- State ---
+        let map;
+        let scoutMarker;
+        let fogCanvas = document.getElementById('fog-layer');
+        let ctx = fogCanvas.getContext('2d');
+        let animationFrameId;
+        let currentDistanceToTarget = 0;
         
-        let myLat = null, myLng = null, mySpeed = 0;
-        let isFirstLoad = true;
+        let visitedTrack = [CONFIG.START_COORDS]; 
+        let reportedLocations = [];
+        let debounceTimer;
 
-        // --- 1. Map Setup (Satellite) ---
-        const map = L.map('map', {
-            zoomControl: false, 
-            attributionControl: false,
-            zoomAnimation: true
-        }).setView([25.0330, 121.5654], 16);
-
-        // Using Esri World Imagery for Satellite view
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            maxZoom: 19,
-            attribution: 'Tiles &copy; Esri'
-        }).addTo(map);
-
-        // --- 2. Custom Fog Layer (Soft Blur & Optimized) ---
-        L.FogLayer = L.GridLayer.extend({
-            createTile: function (coords) {
-                const tile = L.DomUtil.create('canvas', 'leaflet-tile');
-                const size = this.getTileSize();
-                tile.width = size.x;
-                tile.height = size.y;
-
-                const ctx = tile.getContext('2d');
-                
-                // A. Draw Darkness (Fog)
-                // 0.9 opacity to allow slight visibility of terrain features (looks cooler)
-                // Or 0.95 for hardcore darkness
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.92)'; 
-                ctx.fillRect(0, 0, tile.width, tile.height);
-
-                // B. Prepare to Erase (Light Up)
-                ctx.globalCompositeOperation = 'destination-out';
-                
-                const bounds = this._tileCoordsToBounds(coords);
-                
-                // Optimize: Only loop through ALL points if we haven't implemented spatial indexing yet.
-                // For < 5000 points, simple loop is acceptable on modern phones.
-                allKnownPoints.forEach(pt => {
-                    const latLng = L.latLng(pt[0], pt[1]);
-                    
-                    // Margin of error (pad) to account for the radius extending into this tile
-                    if (bounds.pad(0.2).contains(latLng)) {
-                        const p = this._latLngToTilePixel(latLng, coords);
-                        let radius = pt[2] || 20;
-                        
-                        // Increase radius slightly for the soft blur effect
-                        const drawRadius = radius * 1.5;
-
-                        // Soft Gradient Logic
-                        const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, drawRadius);
-                        
-                        // Center (0): Fully Transparent (Alpha 1 in destination-out means Remove 100%)
-                        grad.addColorStop(0, 'rgba(0,0,0,1)'); 
-                        
-                        // Middle (0.4): Still mostly clear
-                        grad.addColorStop(0.4, 'rgba(0,0,0,0.8)');
-                        
-                        // Edge (1.0): No removal (Alpha 0)
-                        grad.addColorStop(1, 'rgba(0,0,0,0)'); 
-
-                        ctx.fillStyle = grad;
-                        ctx.beginPath();
-                        ctx.arc(p.x, p.y, drawRadius, 0, Math.PI * 2);
-                        ctx.fill();
-                    }
-                });
-
-                return tile;
-            },
-
-            // Helper: Calculate pixel position relative to the tile
-            _latLngToTilePixel: function(latLng, coords) {
-                const mapPos = map.project(latLng, coords.z);
-                const size = this.getTileSize();
-                const tileNw = new L.Point(coords.x * size.x, coords.y * size.y);
-                return mapPos.subtract(tileNw);
-            },
-
-            // Fixed NW calculation
-            _tileCoordsToNw: function (coords) {
-                const size = this.getTileSize();
-                return new L.Point(coords.x * size.x, coords.y * size.y);
-            },
-
-            _tileCoordsToBounds: function (coords) {
-                var nw = this._tileCoordsToNw(coords),
-                    se = this._tileCoordsToNw(new L.Point(coords.x + 1, coords.y + 1));
-                return new L.LatLngBounds(map.unproject(nw, coords.z), map.unproject(se, coords.z));
-            }
-        });
-
-        let allKnownPoints = []; 
-        const fogLayer = new L.FogLayer({ tileSize: 512, updateWhenIdle: false }).addTo(map);
-
-        // My Location Marker (Cyberpunk Style)
-        const myIcon = L.divIcon({
-            className: 'my-div-icon',
-            html: '<div style="width:14px; height:14px; background:#00ffcc; border-radius:50%; box-shadow:0 0 15px #00ffcc, 0 0 5px white; border:2px solid #fff;"></div>',
-            iconSize: [18, 18],
-            iconAnchor: [9, 9] // Center the icon
-        });
-        const myMarker = L.marker([0,0], {icon: myIcon, zIndexOffset: 1000}).addTo(map);
-
-
-        // --- 3. GPS Logic (Auto-Follow) ---
-        if (navigator.geolocation) {
-            navigator.geolocation.watchPosition((pos) => {
-                const { latitude, longitude, speed, accuracy } = pos.coords;
-                myLat = latitude;
-                myLng = longitude;
-                mySpeed = (speed || 0) * 3.6; 
-
-                // Update UI
-                document.getElementById('speed-display').innerText = mySpeed.toFixed(1);
-                document.getElementById('gps-acc').innerText = accuracy ? Math.round(accuracy) + "m" : "N/A";
-
-                // Move Marker
-                myMarker.setLatLng([latitude, longitude]);
-                
-                // Auto-Follow Camera Logic
-                // Use panTo for smooth animation instead of setView
-                map.panTo([latitude, longitude], {
-                    animate: true,
-                    duration: 1.0, // Smooth glide
-                    easeLinearity: 0.25
-                });
-
-            }, err => console.error(err), { 
-                enableHighAccuracy: true,
-                maximumAge: 1000 
+        // --- Initialization ---
+        function init() {
+            map = L.map('map', {
+                center: CONFIG.START_COORDS,
+                zoom: 18,
+                zoomControl: false, 
+                attributionControl: false
             });
+
+            // Use CartoDB Voyager for "Daylight/Exploration" vibes
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap &copy; CARTO',
+                subdomains: 'abcd',
+                maxZoom: 20
+            }).addTo(map);
+
+            // Scout Marker: A friendly Blue Dot with a Pulse
+            const scoutIcon = L.divIcon({
+                className: 'custom-scout-icon',
+                html: `<div class="user-pulse" style="
+                    width: 24px; 
+                    height: 24px; 
+                    background: #3b82f6; 
+                    border-radius: 50%; 
+                    border: 4px solid #fff;
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>`,
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+            });
+
+            scoutMarker = L.marker(CONFIG.START_COORDS, { icon: scoutIcon }).addTo(map);
+
+            resizeCanvas();
+            renderFog(); 
+
+            window.addEventListener('resize', () => { resizeCanvas(); renderFog(); });
+            map.on('move', () => {
+                updateUIState();
+                if (!animationFrameId) animationFrameId = requestAnimationFrame(renderFog);
+            });
+            map.on('zoomend', () => {
+                 if (!animationFrameId) animationFrameId = requestAnimationFrame(renderFog);
+            });
+            
+            document.addEventListener('click', (e) => {
+                const suggestions = document.getElementById('address-suggestions');
+                if (!e.target.closest('.relative')) {
+                    suggestions.classList.add('hidden');
+                }
+            });
+
+            updateUIState();
+            startTimer();
+            simulateMovement(); 
         }
 
-        // --- 4. Network Sync Logic ---
-        async function startSync() {
-            let client;
-            const statusText = document.getElementById('status-text');
-            const statusDot = document.getElementById('status-dot');
+        // --- Core Logic: UI & Distance ---
 
-            try {
-                client = await Client.connect(HF_SPACE);
-                statusText.innerText = "Online";
-                statusDot.className = "dot online";
-            } catch (e) {
-                statusText.innerText = "Offline";
-                statusDot.className = "dot offline";
+        function updateUIState() {
+            // Update Coords text
+            const center = map.getCenter();
+            document.getElementById('coords').innerText = `${center.lat.toFixed(5)}, ${center.lng.toFixed(5)}`;
+
+            // Calculate Distance
+            const scoutPos = scoutMarker.getLatLng();
+            currentDistanceToTarget = map.distance(scoutPos, center);
+
+            // Update Crosshair Visuals
+            const ring = document.getElementById('crosshair-ring');
+            const dot = document.getElementById('crosshair-dot');
+            const badge = document.getElementById('crosshair-badge');
+            const reportBtn = document.getElementById('report-btn');
+
+            if (CONFIG.ENABLE_PROXIMITY_CHECK && currentDistanceToTarget > CONFIG.PROXIMITY_LIMIT_METERS) {
+                // TOO FAR (Red/Gray theme)
+                const distanceStr = Math.round(currentDistanceToTarget) + "m";
+                
+                ring.className = "w-16 h-16 border-2 border-red-400 rounded-full flex items-center justify-center transition-colors duration-200 bg-red-500/10 backdrop-blur-sm";
+                dot.className = "w-2 h-2 bg-red-400 rounded-full transition-colors duration-200";
+                
+                badge.className = "absolute -top-12 left-1/2 transform -translate-x-1/2 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg whitespace-nowrap transition-colors duration-200";
+                badge.innerHTML = `<i class="fa-solid fa-ban mr-1"></i> TOO FAR (${distanceStr})`;
+
+                // Disable button visually
+                reportBtn.className = "bg-gray-300 text-gray-500 cursor-not-allowed font-bold py-4 px-8 rounded-full shadow-none transition-all uppercase text-sm tracking-wider w-full md:w-auto border-4 border-white grayscale";
+            } else {
+                // WITHIN RANGE (Green/Active theme)
+                const distanceStr = Math.round(currentDistanceToTarget) + "m";
+
+                ring.className = "w-16 h-16 border-2 border-green-500 rounded-full flex items-center justify-center transition-colors duration-200 bg-green-500/10 backdrop-blur-sm shadow-[0_0_15px_rgba(34,197,94,0.4)]";
+                dot.className = "w-2 h-2 bg-green-500 rounded-full transition-colors duration-200";
+                
+                badge.className = "absolute -top-12 left-1/2 transform -translate-x-1/2 bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg whitespace-nowrap transition-colors duration-200";
+                badge.innerHTML = `<i class="fa-solid fa-check mr-1"></i> READY (${distanceStr})`;
+
+                // Enable button visually
+                reportBtn.className = "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-4 px-8 rounded-full shadow-blue-500/30 shadow-lg active:scale-95 transition-all uppercase text-sm tracking-wider w-full md:w-auto border-4 border-white cursor-pointer";
+            }
+        }
+
+        function showNotification(msg, isError = true) {
+            const notif = document.getElementById('notification');
+            const msgSpan = document.getElementById('notif-msg');
+            msgSpan.innerText = msg;
+            
+            if(isError) {
+                notif.className = "absolute top-24 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full shadow-xl bg-red-100 text-red-600 border border-red-200 pointer-events-none transition-all duration-300 flex items-center gap-3 font-bold z-50 text-sm whitespace-nowrap visible-modal";
+            } else {
+                notif.className = "absolute top-24 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full shadow-xl bg-green-100 text-green-700 border border-green-200 pointer-events-none transition-all duration-300 flex items-center gap-3 font-bold z-50 text-sm whitespace-nowrap visible-modal";
+            }
+            
+            setTimeout(() => {
+                notif.classList.add('hidden');
+            }, 3000);
+        }
+
+        // --- Core Logic: The Fog (Clouds) ---
+        
+        function resizeCanvas() {
+            fogCanvas.width = window.innerWidth;
+            fogCanvas.height = window.innerHeight;
+        }
+
+        function trackPosition(lat, lng) {
+            visitedTrack.push([lat, lng]);
+        }
+
+        function renderFog() {
+            animationFrameId = null;
+
+            const centerLatLng = map.getCenter(); 
+            const metersPerDegree = 111320; 
+            const latOffset = CONFIG.FOG_VISIBILITY_RADIUS_METERS / metersPerDegree;
+            const edgeLatLng = [centerLatLng.lat + latOffset, centerLatLng.lng];
+            const centerPoint = map.latLngToContainerPoint(centerLatLng);
+            const edgePoint = map.latLngToContainerPoint(edgeLatLng);
+            const radiusPx = Math.abs(centerPoint.y - edgePoint.y);
+
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.clearRect(0, 0, fogCanvas.width, fogCanvas.height);
+            
+            // White "Mist"
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+            ctx.fillRect(0, 0, fogCanvas.width, fogCanvas.height);
+
+            // Cut out the path
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.lineWidth = radiusPx * 2; 
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.shadowBlur = 40;
+            ctx.shadowColor = '#000'; 
+
+            ctx.beginPath();
+
+            if (visitedTrack.length > 0) {
+                const p1 = map.latLngToContainerPoint(visitedTrack[0]);
+                ctx.moveTo(p1.x, p1.y);
+                for (let i = 1; i < visitedTrack.length; i++) {
+                    const p = map.latLngToContainerPoint(visitedTrack[i]);
+                    ctx.lineTo(p.x, p.y);
+                }
+            }
+            ctx.stroke();
+
+            // Current Circle
+            const currentPos = scoutMarker.getLatLng();
+            const currentScreenPoint = map.latLngToContainerPoint(currentPos);
+            ctx.beginPath();
+            ctx.arc(currentScreenPoint.x, currentScreenPoint.y, radiusPx, 0, Math.PI * 2, true);
+            ctx.fill();
+
+            // Reset Shadow
+            ctx.shadowBlur = 0;
+
+            // Draw Subtle Ring
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.beginPath();
+            ctx.arc(currentScreenPoint.x, currentScreenPoint.y, radiusPx, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(59, 130, 246, 0.2)'; 
+            ctx.lineWidth = 2;
+            ctx.setLineDash([10, 10]); 
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        // --- Address Autocomplete ---
+        
+        function handleAddressInput(input) {
+            const query = input.value;
+            const list = document.getElementById('address-suggestions');
+            
+            if (query.length < 3) {
+                list.classList.add('hidden');
                 return;
             }
 
-            setInterval(async () => {
-                if (isSyncing) return;
-                isSyncing = true;
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`)
+                .then(res => res.json())
+                .then(data => {
+                    list.innerHTML = '';
+                    if (data.length > 0) {
+                        list.classList.remove('hidden');
+                        data.forEach(item => {
+                            const li = document.createElement('li');
+                            li.className = 'p-3 hover:bg-blue-50 cursor-pointer text-xs text-gray-700 flex items-center gap-2 transition-colors';
+                            li.innerHTML = `<i class="fa-solid fa-location-dot text-gray-400"></i> ${item.display_name}`;
+                            li.onclick = () => {
+                                input.value = item.display_name;
+                                list.classList.add('hidden');
+                            };
+                            list.appendChild(li);
+                        });
+                    } else {
+                        list.classList.add('hidden');
+                    }
+                })
+                .catch(err => console.error("Geocoding error:", err));
+            }, 500); 
+        }
+
+        function fetchAddressForCoords(lat, lng) {
+            const list = document.getElementById('address-suggestions');
+            const input = document.getElementById('address-input');
+            
+            input.placeholder = "Identifying location...";
+            list.innerHTML = `<li class="p-3 text-xs text-blue-500 animate-pulse font-bold text-center">Finding address...</li>`;
+            list.classList.remove('hidden');
+
+            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`)
+                .then(response => response.json())
+                .then(data => {
+                    list.innerHTML = '';
+                    if (data && data.display_name) {
+                        const li = document.createElement('li');
+                        li.className = 'p-3 hover:bg-blue-50 cursor-pointer text-xs text-gray-800 font-bold border-l-4 border-green-500 bg-green-50';
+                        li.innerHTML = `<div class="flex items-center gap-2"><i class="fa-solid fa-crosshairs text-green-600"></i><span>${data.display_name}</span></div>`;
+                        li.onclick = () => {
+                            input.value = data.display_name;
+                            list.classList.add('hidden');
+                        };
+                        list.appendChild(li);
+                    } else {
+                        list.innerHTML = `<li class="p-3 text-xs text-gray-500 text-center">No exact address found.</li>`;
+                    }
+                })
+                .catch(err => {
+                    list.classList.add('hidden');
+                    input.placeholder = "Enter address manually";
+                });
+        }
+
+        // --- Report Modal Logic ---
+
+        function openReportModal() {
+            if (CONFIG.ENABLE_PROXIMITY_CHECK && currentDistanceToTarget > CONFIG.PROXIMITY_LIMIT_METERS) {
+                // Shake effect or just notify
+                showNotification(`Target is ${Math.round(currentDistanceToTarget)}m away. Move closer (max ${CONFIG.PROXIMITY_LIMIT_METERS}m)!`, true);
+                return;
+            }
+
+            const targetPos = map.getCenter();
+            document.getElementById('modal-coords').innerText = `${targetPos.lat.toFixed(6)}, ${targetPos.lng.toFixed(6)}`;
+            document.getElementById('address-input').value = '';
+            document.getElementById('address-suggestions').classList.add('hidden');
+
+            const modal = document.getElementById('report-modal');
+            modal.classList.remove('hidden-modal');
+            modal.classList.add('visible-modal');
+
+            fetchAddressForCoords(targetPos.lat, targetPos.lng);
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('report-modal');
+            modal.classList.remove('visible-modal');
+            modal.classList.add('hidden-modal');
+            document.getElementById('address-suggestions').classList.add('hidden');
+        }
+
+        function submitReport(e) {
+            e.preventDefault();
+            const form = e.target;
+            const formData = new FormData(form);
+            const targetPos = map.getCenter();
+
+            const reportData = {
+                lat: targetPos.lat,
+                lng: targetPos.lng,
+                address: formData.get('address'),
+                spaceName: formData.get('spaceName'),
+                rentableCount: formData.get('rentableCount'),
+                capacity: formData.get('capacity'),
+                price: formData.get('price'),
+                bookingMethod: formData.get('bookingMethod'),
+                additionalInfo: formData.get('additionalInfo'),
+            };
+
+            // CALL THE BACKEND
+            try {
+                const client = await import("https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js");
+                const app = await client.connect("https://huggingface.co/spaces/npc0/DemoWalkAPI"); 
                 
-                // Only show "Syncing" yellow light if it takes too long
-                // statusDot.className = "dot syncing"; 
+                const result = await app.predict("/report", [ reportData ]);
+                
+                console.log("Server response:", result);
+                
+            } catch (error) {
+                console.error("API Error:", error);
+            }
 
-                try {
-                    const result = await client.predict("/sync", [
-                        lastSyncTime,
-                        currentSnapshotVer,
-                        myUserId,
-                        myLat,
-                        myLng,
-                        mySpeed
-                    ]);
+            const btn = form.querySelector('button[type="submit"]');
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> SAVING...';
+            btn.disabled = true;
 
-                    const res = result.data[0];
-                    let needRedraw = false;
+            setTimeout(() => {
+                btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i> SHARED!';
+                showNotification("Location successfully mapped!", false);
 
-                    // A. Snapshot Update
-                    if (res.sync_type === "snapshot") {
-                        console.log("Snapshot Loaded:", res.payload.length);
-                        allKnownPoints = res.payload;
-                        if (res.recent_events) {
-                            allKnownPoints = allKnownPoints.concat(res.recent_events);
-                        }
-                        currentSnapshotVer = res.snapshot_version;
-                        document.getElementById('ver-display').innerText = currentSnapshotVer;
-                        needRedraw = true;
-                    } 
-                    // B. Delta Update
-                    else if (res.payload && res.payload.length > 0) {
-                        // Append new points
-                        allKnownPoints = allKnownPoints.concat(res.payload);
-                        needRedraw = true;
-                    }
+                // --- ADD PIN TO MAP ---
+                const reportIcon = L.divIcon({
+                    className: 'report-icon',
+                    html: `<div class="relative group">
+                            <i class="fa-solid fa-location-dot text-4xl text-orange-500 drop-shadow-lg transform transition-transform group-hover:-translate-y-1"></i>
+                           </div>`,
+                    iconSize: [30, 42],
+                    iconAnchor: [15, 42],
+                    popupAnchor: [0, -45]
+                });
 
-                    // Only redraw if we actually got new data (Fixes heartbeat flicker)
-                    if (needRedraw) {
-                        fogLayer.redraw();
-                    }
+                const marker = L.marker([reportData.lat, reportData.lng], {icon: reportIcon}).addTo(map);
+                
+                const popupContent = `
+                    <div class="text-gray-700">
+                        <div class="bg-gradient-to-r from-orange-400 to-pink-500 h-2 rounded-t-lg -mx-3 -mt-3 mb-3"></div>
+                        <h3 class="font-bold text-lg text-gray-900 leading-tight mb-1">${reportData.spaceName}</h3>
+                        <p class="text-xs text-gray-500 mb-2"><i class="fa-solid fa-map-pin mr-1"></i> ${reportData.address || 'Unknown Loc'}</p>
+                        <div class="bg-gray-50 rounded p-2 mb-2 border border-gray-100 text-sm">
+                            <div class="flex justify-between mb-1">
+                                <span class="font-bold text-gray-600">Price:</span> <span class="text-green-600 font-bold">${reportData.price}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="font-bold text-gray-600">Capacity:</span> <span>${reportData.capacity} ppl</span>
+                            </div>
+                        </div>
+                        ${reportData.additionalInfo ? `<p class="text-xs italic text-gray-500 mb-3 border-l-2 border-gray-300 pl-2">"${reportData.additionalInfo}"</p>` : ''}
+                        <a href="#" class="block text-center bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm py-2 rounded-lg transition-colors shadow-md">
+                            Book: ${reportData.bookingMethod}
+                        </a>
+                    </div>
+                `;
+                marker.bindPopup(popupContent);
+                
+                reportedLocations.push({ marker, data: reportData });
+                
+                setTimeout(() => {
+                    closeModal();
+                    form.reset();
+                    btn.innerHTML = originalHTML;
+                    btn.disabled = false;
+                }, 1000);
+            }, 1000);
+        }
 
-                    lastSyncTime = res.server_time;
-                    
-                    // Keep dot green unless error
-                    statusDot.className = "dot online";
+        // --- Simulation ---
 
-                } catch (err) {
-                    console.warn(err);
-                    statusDot.className = "dot offline";
-                } finally {
-                    isSyncing = false;
-                }
+        function startTimer() {
+            let seconds = 0;
+            setInterval(() => {
+                seconds++;
+                const date = new Date(0);
+                date.setSeconds(seconds);
+                const timeString = date.toISOString().substr(11, 8);
+                document.getElementById('timer').innerText = timeString;
+                
+                const speed = (3 + Math.random() * 2).toFixed(1);
+                document.getElementById('speed').innerHTML = `${speed} <span class="text-sm font-normal text-gray-400">km/h</span>`;
+            }, 1000);
+        }
 
+        function simulateMovement() {
+            setInterval(() => {
+                const current = scoutMarker.getLatLng();
+                const newLat = current.lat + (Math.random() - 0.5) * 0.00015; 
+                const newLng = current.lng + (Math.random() - 0.5) * 0.00015;
+                
+                scoutMarker.setLatLng([newLat, newLng]);
+                trackPosition(newLat, newLng);
+                renderFog();
+                
+                // Also update UI when marker moves, as distance changes even if map doesn't move
+                updateUIState();
             }, 2000);
         }
 
-        startSync();
-
-        window.reportLocation = function() {
-            if(!myLat) { alert("Waiting for GPS signal..."); return; }
-            const note = prompt("Name of the location (Music Room, Hall, etc.):");
-            if(note) alert(`Location Saved: ${note}`);
-        }
+        // Initialize App
+        init();
 
     </script>
 </body>
-</html>
+</html>```
